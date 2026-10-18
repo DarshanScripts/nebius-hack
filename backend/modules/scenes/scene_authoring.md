@@ -100,6 +100,9 @@ Clamp every start to `interior(props).start` or later so content appears after t
   your cues (`claim_ids`) and optionally with `ClaimTag`. Never invent numbers (latency, users,
   traffic) for visual interest. Preserve stated uncertainty.
 - Do not repeat the spoken sentence as a paragraph — captions already show it. Short labels.
+- Never overlap text: each text element gets its own region, at most one label + one sublabel per
+  `Box` (use its `label`/`sublabel` props, not extra `Label`s on top), and leave ≥ 24 px between
+  text blocks. Two texts that occupy the same area at the same frame are a defect.
 
 ## Output (SceneDraft)
 
