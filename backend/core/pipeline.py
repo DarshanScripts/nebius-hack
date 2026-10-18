@@ -110,9 +110,32 @@ class Coordinator:
 
     async def characters(self, project_id: str) -> list[CharacterSpec]:
         key = f"projects/{project_id}/inputs/characters.json"
+        upgraded_key = f"projects/{project_id}/inputs/characters-with-images.json"
+        if self.runtime.path(upgraded_key).exists():
+            import json
+            return [CharacterSpec.model_validate(c) for c in json.loads(self.runtime.path(upgraded_key).read_bytes())]
         if self.runtime.path(key).exists():
             import json
-            return [CharacterSpec.model_validate(c) for c in json.loads(self.runtime.path(key).read_bytes())]
+            characters = [CharacterSpec.model_validate(c) for c in json.loads(self.runtime.path(key).read_bytes())]
+            # A project may be created before its PNGs arrive. Attach both
+            # later without replacing the original immutable input snapshot,
+            # but only while its scene context has not been locked.
+            if (not self.runtime.path(f"projects/{project_id}/context.json").exists()
+                    and all(c.image is None or
+                            (self.settings.assets_root / f"characters/{c.character_id}.png").is_file()
+                            for c in characters)):
+                changed = False
+                for char in characters:
+                    if char.image is not None:
+                        continue
+                    path = self.settings.assets_root / f"characters/{char.character_id}.png"
+                    char.image = await self.runtime.write_bytes(
+                        f"projects/{project_id}/inputs/characters/{char.character_id}.png",
+                        path.read_bytes(), "image/png")
+                    changed = True
+                if changed:
+                    await self.runtime.write_json(upgraded_key, [c.model_dump(mode="json") for c in characters])
+            return characters
         characters = []
         for character_id, name in (("sundar", "Sundar Pichai"), ("jensen", "Jensen Huang")):
             char = CharacterSpec(character_id=character_id, display_name=name)

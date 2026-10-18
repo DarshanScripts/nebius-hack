@@ -6,7 +6,7 @@ Updated: 2026-10-18. Read [context.md](context.md), [plan.md](plan.md), and the 
 
 The pipeline is topic → Tavily research → grounded Nemotron dialogue → Chatterbox Turbo conditioned on two reference WAVs → WhisperX word timing → six independently editable Remotion scenes → 1080×1920, 30 fps MP4. Visual design: white dotted notebook page, motion workboard in the upper 70%, speaker PNGs in the lower 30%.
 
-Working branch is `feat/m1-platform`, local HEAD `e624a4e`. All four teammate branches were fetched and merged locally with `--no-ff`; this branch is 28 commits ahead of `origin/feat/m1-platform` before the pending integration commit. `main` has not been updated. Do not reset, clean, or overwrite the worktree. Review `git status` and diff before committing. Never stage `.env`, voice references, `.remotion`, output artifacts, caches, or generated video.
+Working branch is `feat/m1-platform`. All four teammate branches were fetched and merged locally with `--no-ff`. Integration commit `0b53b03` was pushed to `origin/feat/m1-platform` on 2026-10-18; `main` has not been updated. Do not reset, clean, or overwrite the worktree. Review `git status` and diff before committing. Never stage `.env`, voice references, `.remotion`, output artifacts, caches, or generated video.
 
 The user authorized integration, pushing, and setup of the existing Nebius Devlab. New GPU resources are unnecessary.
 
@@ -15,7 +15,7 @@ The user authorized integration, pushing, and setup of the existing Nebius Devla
 - Python backend: 150 tests passed. Frontend production build and Remotion typecheck passed. Remotion tests: 7 passed, 1 skipped for an unavailable prior-reel fixture.
 - Full mock coordinator flow generated six previews, edited scene six to revision 2 without changing other scene hashes or audio, stitched a 1080×1920, 30 fps H.264/AAC MP4 with 1800 frames, and recovered persisted project state. Report: `output/demos/platform-integration/projects/d3bd48a9-d6e9-46aa-8837-a8886d507a10/acceptance.json`. This was mock research, silent audio, and mock timing, so it does not establish the live cloud reel.
 - `scripts/check_nemotron.py` reached HTTP 200 for both JSON-prompt and tool-calling requests using the configured NVIDIA model on 2026-10-18. The ignored local `.env` now selects `NEMOTRON_STRUCTURED_MODE=tool_calling`; native JSON Schema support remains untested. Capability report: `output/capabilities/nemotron.json`.
-- Integration fixes in the worktree include preview/final attempt identity, Compose build paths, core dependency lock, Remotion acceptance driver, and Chatterbox `setuptools==80.9.0` pin. Review before commit. `infra/FRIEND_SETUP.md` is partly historical and has stale teammate coding instructions.
+- Integration fixes in `0b53b03` include preview/final attempt identity, Compose build paths, core dependency lock, Remotion acceptance driver, and Chatterbox `setuptools==80.9.0` pin.
 - The frontend Vite config now supports relative assets (`VITE_BASE_PATH=./`) and an exact proxy hostname (`VITE_PREVIEW_HOST`). This was required to serve the built editor under Jupyter's `/proxy/5173/` path.
 
 ## Existing Nebius GPU Devlab
@@ -26,7 +26,7 @@ Jupyter runs in the Nebius port-8888 authenticated tunnel. Its tunnel hostname c
 
 Persistent remote speech workspace: `/home/jovyan/work/nebius-speech`. Chatterbox and WhisperX use separate Python 3.11 virtual environments `.venv-chatterbox` and `.venv-whisperx`, each with Torch 2.8.0+cu128. The private workspace `.env` (mode 600) contains the **same** voice/alignment bearer tokens as the ignored local repo `.env`; `.env.gpu` is older and has different keys. Launch from `.env`, never `.env.gpu`.
 
-The user-supplied real reference WAVs are installed remotely at `assets/voices/{sundar,jensen}/reference.wav` (mode 600) and in the local ignored `assets/voices/` paths. Remote/local SHA-256 matched. Character PNGs have **not** been provided yet. Do not call voice identity/perceptual quality verified merely from inference.
+The user-supplied real reference WAVs are installed remotely at `assets/voices/{sundar,jensen}/reference.wav` (mode 600) and in the local ignored `assets/voices/` paths. Remote/local SHA-256 matched. The user also supplied transparent `jensen.png` and `sundar.png`; both were installed under the remote `assets/characters/` directory (mode 600) and local ignored `assets/characters/`, with matching SHA-256 hashes. Do not call voice identity/perceptual quality verified merely from inference.
 
 Before Devlab restart, both loopback services returned `status: ok`, `model_loaded: true`, `device: cuda`:
 
@@ -63,10 +63,23 @@ NVIDIA provider keys. API `/api/health` reported `mode: live` and
 `auth_required: true`. The browser loaded the editor and created a live
 project through authenticated Jupyter `/proxy/5173/`. Its frontend uses
 same-origin `/proxy/8000/api`; the backend calls speech over loopback. This
-avoids the Jupyter-token/service-bearer header conflict. At handoff, the
-example WhatsApp voice calling project is still **researching** after
-persisting its Tavily request ID. Project ID:
+avoids the Jupyter-token/service-bearer header conflict. At the latest
+verified editor check, the example WhatsApp voice calling project had completed
+research and dialogue and started image search. Project ID:
 `615d8640-d6c6-4338-87f4-4be723e224d1`.
+
+The character PNGs arrived after the example project was created. Its original
+`inputs/characters.json` has null images. `Coordinator.characters()` now
+attaches both later from `ASSETS_ROOT` to a new immutable
+`inputs/characters-with-images.json` **before** `context.json` is locked; this
+patch is installed in the remote source file. The running API process has not
+yet been restarted to load it, so do not assume the active project has the
+images. If `context.json` was already locked with null images, a fresh project
+is needed; `Coordinator.stitch()` refuses a live final render with error
+`CHARACTERS_MISSING`. Research and dialogue have completed in the existing
+project, so preserve them and avoid a duplicate Tavily request if possible.
+Browser control then failed because automatic approval review reported that
+the workspace was out of credits. No API restart or retry was performed.
 
 No cloud final reel was produced yet. The Devlab container has no verified
 Docker/Compose; all five processes were started directly and need relaunch
@@ -75,10 +88,40 @@ current Jupyter tunnel hostname may change on restart; update the app
 `.env` values `VITE_PREVIEW_HOST` and `FRONTEND_ORIGIN`, rebuild the
 frontend if needed, and get the new URL from Nebius.
 
-## Priority after restart
+## Next operator actions on Nebius
 
-1. Watch the live example project through the cloud editor. Tavily research can take minutes; check its persisted request ID and stage errors before retrying. Continue to dialogue, real speech/alignment, scene previews, and final stitch if it completes. Check listening/visual quality separately. Character PNGs remain a missing user asset.
-2. Review diff and `git diff --check`, then commit and push `feat/m1-platform`; preserve all four teammate merges. Merge to `main` through the team's review path only after the integration branch is published.
+1. The live example project completed Tavily research (16 sources, 12 claims) and Nemotron dialogue (12 turns), then began image search. Inspect `output/projects/615d8640-d6c6-4338-87f4-4be723e224d1/context.json` before restarting the API. If absent, restart only the existing API process to load the installed character upgrade patch, then use the editor's Retry stage action to resume from its first incomplete stage. If present, inspect whether both `characters[*].image` fields are populated; a frozen context with null images needs a fresh project. Never start another paid research request merely to inspect status.
+2. Follow speech/alignment, scene previews, and Stitch once both PNGs are present in the project context. Check listening and visual quality separately.
+3. Review and merge the published `feat/m1-platform` branch to `main` through the team's review path when ready; preserve all four teammate merges.
+
+Read-only remote inspection, once browser access returns:
+
+```bash
+cd /home/jovyan/work/nebius-app
+python - <<'PY'
+import json
+from pathlib import Path
+p = Path('output/projects/615d8640-d6c6-4338-87f4-4be723e224d1')
+s = json.loads((p / 'snapshot.json').read_text())
+print('status:', s['status'], 'error:', (s.get('error') or {}).get('code'))
+print('research:', bool(s.get('research')), 'dialogue:', bool(s.get('script')),
+      'images:', bool(s.get('images')), 'audio:', bool(s.get('audio')))
+c = p / 'context.json'
+print('context_locked:', c.exists())
+if c.exists():
+    d = json.loads(c.read_text())
+    print('character_images:', {x['character_id']: bool(x.get('image')) for x in d['characters']})
+PY
+```
+
+If `context_locked` is false, identify the existing API PID and command first,
+then stop and relaunch only that process using the API command in
+[infra/README.md](infra/README.md). Recovery marks the active job interrupted;
+click the editor's Retry stage button. On retry, the upgraded code writes
+`inputs/characters-with-images.json` and reuses the existing research and
+dialogue. If `context_locked` is true with missing images, the original run
+must finish or be inspected, then a fresh project should be created with the
+now-installed PNGs.
 
 ## Secret handling
 

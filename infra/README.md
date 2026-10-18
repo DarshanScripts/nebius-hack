@@ -14,7 +14,8 @@ Chatterbox Turbo and WhisperX FastAPI services run on `127.0.0.1:8002` and
 `/home/jovyan/work/nebius-speech`. Both use Torch 2.8.0+cu128 and report
 `status: ok`, `model_loaded: true`, and `device: cuda`. The two real reference
 WAVs are in `assets/voices/{sundar,jensen}/reference.wav` on the Devlab, mode
-600. A live loopback TTS → WhisperX alignment check passed for both speakers:
+600. The supplied transparent character PNGs are now in
+`assets/characters/{sundar,jensen}.png`, mode 600. A live loopback TTS → WhisperX alignment check passed for both speakers:
 11 ordered word timestamps each, with a SHA-256 match to the normalized audio.
 Generated WAV/JSON files are under `output/speech-check/` on that workspace.
 
@@ -42,12 +43,15 @@ tunnel URL is
 get the current hostname from Nebius if the Devlab restarts.
 
 A live example project for “How does WhatsApp voice calling infrastructure
-work?” was created through the cloud editor and reached Tavily's asynchronous
-research stage. This is **not yet a completed cloud reel**. A previous local
-mock pipeline completed a real Remotion render, but live research, dialogue,
-speech, scenes, and final video still require acceptance. Character PNGs
-remain missing. Do not expose the loopback ports publicly or remove bearer
-checks.
+work?” was created through the cloud editor. Tavily returned 16 sources and
+12 grounded claims; Nemotron generated 12 dialogue turns; image search then
+started. This is **not yet a completed cloud reel**. A previous local mock
+pipeline completed a real Remotion render, but live speech, scenes, and final
+video still require acceptance. The PNGs arrived after project creation; the
+remote source now contains a character upgrade path, but the running API
+process has not yet loaded it. Inspect the project context before restarting
+the API and resuming the first incomplete stage. Do not expose the loopback
+ports publicly or remove bearer checks.
 
 ## Recheck the existing GPU services
 
