@@ -958,7 +958,7 @@ Root `.env.example` lists all agreed names without credentials. The owner's igno
 | Variables | Owner/use |
 | --- | --- |
 | `TAVILY_API_KEY`, research model/poll/deadline | Member 2: Tavily research/search |
-| `NEMOTRON_BASE_URL`, `NEMOTRON_API_KEY`, `NEMOTRON_MODEL`, structured mode/timeout | Member 1 config/runtime; members 2/4 consume runtime |
+| `NEMOTRON_BASE_URL`, `NEBIUS_API_KEY`, `NEMOTRON_MODEL`, structured mode/timeout | Member 1 config/runtime; members 2/4 consume runtime |
 | `VOICE_API_URL`, `VOICE_API_KEY`, `VOICE_MODEL`, device/timeout | Member 3 Chatterbox service/client; key is our bearer secret |
 | `ALIGNMENT_API_URL`, key/model/device/timeout | Member 3 WhisperX service/client; mandatory word alignment |
 | `WHISPERX_TRANSCRIBE`, ASR model/compute type | Member 3 optional transcription quality check; known-script alignment is the default |
@@ -970,9 +970,9 @@ Root `.env.example` lists all agreed names without credentials. The owner's igno
 | `NEBIUS_VM_HOST`, `NEBIUS_GPU_VM_HOST`, SSH user/key path | Member 1 deployment inputs; both hosts identify the existing single VM; user is `orange_whisky` |
 | `NEBIUS_VM_NAME`, region/project/subnet/security group/service-account name | Recorded infrastructure metadata; do not create duplicate resources from it |
 
-**Selected inference configuration:** `NEMOTRON_BASE_URL=https://integrate.api.nvidia.com/v1`, `NEMOTRON_MODEL=nvidia/nemotron-3.5-super-vl-120b-a12b`. The owner has populated its NVIDIA key, the Tavily key, and generated internal bearer secrets in local `.env`; keys are intentionally absent from these shared docs and `.env.example`. Member 1 still checks model/tool availability against this account. Inference credentials, VM SSH credentials, and cloud IAM credentials are distinct. Modules consume `Runtime.llm`/`Runtime.structured` and do not instantiate a hardcoded alternative endpoint.
+**Selected inference configuration:** `NEMOTRON_BASE_URL=https://api.tokenfactory.nebius.com/v1/`, `NEMOTRON_MODEL=nvidia/Nemotron-3.5-Super-VL`, authenticated by `NEBIUS_API_KEY` in the ignored private `.env`. The Tavily key and generated internal bearer secrets are also private and remain absent from shared docs and `.env.example`. Inference credentials, VM SSH credentials, and cloud IAM credentials are distinct. Modules consume `Runtime.llm`/`Runtime.structured` and do not instantiate a hardcoded alternative endpoint.
 
-`VOICE_API_URL` and `ALIGNMENT_API_URL` will point to **our Chatterbox and WhisperX FastAPI services**, with the exact contracts in section 6; these services have not yet been implemented/deployed by this planning step. They do not require NVIDIA NIM, a Resemble hosted API key, or an OpenAI Whisper API key. The Nebius VM already exists in the owner's project; deployment uses SSH. Do not pass a broad Nebius IAM credential into application containers merely to call these services. `NEMOTRON_API_KEY` is currently the NVIDIA hosted inference key. Keep mock mode available for teammates; the cloud API uses live mode once its configured services are ready.
+`VOICE_API_URL` and `ALIGNMENT_API_URL` point to **our Chatterbox and WhisperX FastAPI services**, with the exact contracts in section 6. They do not require a Resemble hosted API key or an OpenAI Whisper API key. The Nebius VM already exists in the owner's project; deployment uses SSH. Do not pass a broad Nebius IAM credential into application containers merely to call these services. Keep mock mode available for teammates; the cloud API uses live mode once configured services are ready.
 
 ## 14. Five-hour checkpoints and definition of done
 

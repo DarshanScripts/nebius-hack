@@ -44,7 +44,7 @@ class AppRuntime:
         if self._llm is None:
             if not self._config.nemotron_api_key.get_secret_value():
                 raise StageFailure(PipelineError(code="MISSING_CONFIGURATION", stage="nemotron",
-                                                 message="NEMOTRON_API_KEY is required"))
+                                                 message="NEBIUS_API_KEY is required (legacy NEMOTRON_API_KEY is also accepted)"))
             from langchain_openai import ChatOpenAI
             self._llm = ChatOpenAI(
                 base_url=self._config.nemotron_base_url,

@@ -2,7 +2,7 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -22,9 +22,10 @@ class Settings(BaseSettings):
     tavily_research_model: str = "pro"
     tavily_poll_interval_seconds: float = Field(default=3, gt=0)
     tavily_research_timeout_seconds: float = Field(default=600, gt=0)
-    nemotron_base_url: str = "https://integrate.api.nvidia.com/v1"
-    nemotron_api_key: SecretStr = SecretStr("")
-    nemotron_model: str = "nvidia/nemotron-3.5-super-vl-120b-a12b"
+    nemotron_base_url: str = "https://api.tokenfactory.nebius.com/v1/"
+    nemotron_api_key: SecretStr = Field(default=SecretStr(""),
+        validation_alias=AliasChoices("NEBIUS_API_KEY", "NEMOTRON_API_KEY"))
+    nemotron_model: str = "nvidia/Nemotron-3.5-Super-VL"
     nemotron_structured_mode: Literal["json_prompt", "tool_calling"] = "json_prompt"
     nemotron_timeout_seconds: float = Field(default=180, gt=0)
     scene_agent_mode: Literal["react", "single_call"] = "react"

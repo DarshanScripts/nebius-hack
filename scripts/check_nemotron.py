@@ -12,7 +12,7 @@ async def main():
     settings = Settings()
     key = settings.nemotron_api_key.get_secret_value()
     if not key:
-        raise SystemExit("Set NEMOTRON_API_KEY in the ignored .env first")
+        raise SystemExit("Set NEBIUS_API_KEY in the ignored .env first")
     result = {"model": settings.nemotron_model, "base_url": settings.nemotron_base_url,
               "checked_at": datetime.now(timezone.utc).isoformat(),
               "json_prompt": False, "tool_calling": False, "selected_mode": None}

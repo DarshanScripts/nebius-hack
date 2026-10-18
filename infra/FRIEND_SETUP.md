@@ -16,7 +16,7 @@ The current application runs from two persistent directories:
 
 The private `.env` in each workspace is mode 600. Do not print, copy into
 Git, or upload either file to an unrelated destination. The app env has the
-Tavily and NVIDIA keys, its internal bearer keys, and
+Tavily and Nebius Token Factory keys, its internal bearer keys, and
 `ASSETS_ROOT=/home/jovyan/work/nebius-speech/assets`. The worker receives
 only its render settings. The two speech apps require their separate
 bearer keys.

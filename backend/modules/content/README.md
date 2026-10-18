@@ -38,12 +38,12 @@ export PYTHONPATH="$PWD"
 python -m backend.modules.content.demo --mock --output output/demos/content     # fixtures only, no keys
 python -m pytest backend/modules/content/tests -q                                # 22 tests
 python -m backend.modules.content.demo --output output/demos/content --project-id live-001 \
-    --topic "How does WhatsApp voice calling infrastructure work?"               # live; needs TAVILY_API_KEY + NEMOTRON_API_KEY in .env
+    --topic "How does WhatsApp voice calling infrastructure work?"               # live; needs TAVILY_API_KEY + NEBIUS_API_KEY in .env
 ```
 
 Rerunning the live demo with the same `--project-id` reuses the saved research bundle and script (no Tavily or Nemotron calls for those stages, exactly as core does) and only regenerates images into a fresh `aN/` folder.
 
-The live demo reads root `.env` (`TAVILY_*`, `NEMOTRON_BASE_URL`, `NEMOTRON_API_KEY`, `NEMOTRON_MODEL`) and uses a small local `DemoRuntime` (json_prompt + `model_validate_json`, 2 corrective attempts; refuses to overwrite artifacts with different bytes, like core's `AppRuntime`). Rerunning after an interruption resumes the saved Tavily request ID.
+The live demo reads root `.env` (`TAVILY_*`, `NEMOTRON_BASE_URL`, `NEBIUS_API_KEY`, `NEMOTRON_MODEL`) and uses a small local `DemoRuntime` (json_prompt + `model_validate_json`, 2 corrective attempts; refuses to overwrite artifacts with different bytes, like core's `AppRuntime`). Rerunning after an interruption resumes the saved Tavily request ID.
 
 ## Results (2026-10-18)
 - **Live runs (real Tavily `pro` + Nemotron `nvidia/nemotron-3.5-super-vl-120b-a12b`, 3 projects):** 10–15 real sources (WhatsApp security whitepaper, engineering.fb.com, developers.facebook.com, faq.whatsapp.com), 11–12 grounded `documented` claims each citing the correct URL, 12 turns / 129–133 words of plain-language dialogue, 5–6 relevant topic-specific images (one scene correctly marked `unavailable` by the ranker). Resume verified: run 3 reused run 2's saved `initial.json`/`raw.json`. Model listed by `/v1/models`; replies carry `reasoning_content` separately and clean JSON in `content`. One transient NVIDIA HTTP 500 was observed → SDK retries (3) added. A real Tavily response is saved as `fixtures/tavily_live_sample.json` for regression tests (report text only, no credentials).

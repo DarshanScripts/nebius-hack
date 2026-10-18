@@ -195,6 +195,38 @@ The original project is already `context_locked: true` with both images false;
 this was confirmed from the Devlab filesystem after API recovery. A fresh
 project is needed for a final reel with the supplied PNGs.
 
+## Live state update (2026-10-18, later than the notes above)
+
+This section supersedes earlier Devlab/project status wherever they conflict.
+The authenticated Jupyter tunnel is currently open in Brave browser ID `1`,
+Jupyter tab `24799453`; the Reel Lab editor is tab `24799497`.
+
+The new live project is `745e19c7-8dca-442d-9540-d81995240362` (WhatsApp
+voice-call infrastructure). Its `inputs/characters.json` and locked
+`context.json` both reference the real Sundar and Jensen PNGs. Tavily research,
+dialogue, image selection, Chatterbox audio, WhisperX word timing, and the
+1800-frame timeline are complete. Scenes 1–4 are ready. Scene 5 is ready using
+the deterministic fallback because the agent output was unusable. Scene 6 was
+retried at 17:47 local time after switching inference to Nebius and completed
+at 17:49. The editor was verified showing 6/6 ready and Ready to stitch.
+A completed live final MP4 has not yet been verified.
+
+The live `.env` on `/home/jovyan/work/nebius-app` is still mode 600 and now
+uses `https://api.tokenfactory.nebius.com/v1/`, model
+`nvidia/Nemotron-3.5-Super-VL`, with the user's secret stored as
+`NEBIUS_API_KEY` (also mapped to `NEMOTRON_API_KEY` for the deployed runtime's
+legacy setting). Never print or commit either key. `SCENE_AGENT_MODE=single_call`,
+`SCENE_AGENT_CONCURRENCY=6`, and `NEMOTRON_TIMEOUT_SECONDS=360` are set. A live
+text inference smoke request returned `OK`; `/api/health` returned `ok`, live
+mode. API PID at restart was `20248`. Speech services and the Remotion worker
+were left running. Retried scene requests are serialized by the coordinator:
+another retry while a scene is active returns HTTP 409 “Wait for active work”.
+
+Local code/docs now default to Nebius Token Factory and `NEBIUS_API_KEY`, with
+legacy `NEMOTRON_API_KEY` accepted by Pydantic settings. `.env` is ignored and
+must not be staged. The local changes are uncommitted; inspect `git status` and
+diff before committing or deploying further changes.
+
 ## Secret handling
 
 Root `.env`, remote workspace `.env`, and voice WAVs are ignored/private. Do not display their values or stage them. User has already provided the reference WAV paths and existing API keys; do not ask again. User approved this specific authenticated Jupyter proxy change; any new public route or access expansion would be a separate decision.

@@ -57,7 +57,7 @@ Topic
 
 Runtime stages have real data dependencies. **Team implementation does not need to wait for those stages:** everyone builds against the frozen schemas and deterministic mock fixtures in `plan.md`. Scene agents share an immutable context, theme, and boundary contract. They do not exchange messages or edit each other's files. A small Python scheduler calls stages and publishes state; there is no supervisor LLM or additional orchestration agent.
 
-Use LangChain structured output for dialogue, image-query planning, and edit routing. Use LangChain `create_agent` for each scene's tool-using generation/repair loop. Do not add a second LangGraph workflow merely to connect the stages. The selected text endpoint is **`https://integrate.api.nvidia.com/v1`**, model **`nvidia/nemotron-3.5-super-vl-120b-a12b`**. Member 1 checks actual tool/schema capabilities before enabling that strategy. Read `NEMOTRON_*` configuration; do not hardcode another provider/model in a module.
+Use LangChain structured output for dialogue, image-query planning, and edit routing. Use LangChain `create_agent` for each scene's tool-using generation/repair loop. Do not add a second LangGraph workflow merely to connect the stages. The selected text endpoint is Nebius Token Factory **`https://api.tokenfactory.nebius.com/v1/`**, model **`nvidia/Nemotron-3.5-Super-VL`**. Set `NEBIUS_API_KEY` in the private `.env`; runtime configuration reads it through `NEMOTRON_*` settings. Do not hardcode a provider/model in a module.
 
 ## Assets the owner will add
 
