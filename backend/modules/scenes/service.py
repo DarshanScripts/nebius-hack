@@ -30,6 +30,8 @@ from contracts.models import (
     StageFailure,
 )
 
+from contracts.validation import validate_build, validate_context, validate_render
+
 from . import agent, router
 from .timing import normalize_cues, scene_words
 from .worker_client import RenderWorkerClient, setting
@@ -56,13 +58,18 @@ def operation_dir(task: SceneTask) -> str:
     return f"projects/{task.project_id}/scenes/{task.slot.scene_id}/v{task.revision}/{task.job_id}"
 
 
-def attempt_dir(task: SceneTask, attempt: int | str) -> str:
-    """projects/<id>/scenes/<sid>/v<rev>/<operation_id>/a<n> (a fallback build uses 'afb')."""
+def attempt_dir(task: SceneTask, attempt: int) -> str:
+    """projects/<id>/scenes/<sid>/v<rev>/<operation_id>/a<n>, n = 0..2 (the fallback takes a slot too)."""
     return f"{operation_dir(task)}/a{attempt}"
 
 
 def worker_job_id(operation_id: str, build: SceneBuild) -> str:
-    return f"{operation_id}-afb" if build.generation_mode == "fallback" else f"{operation_id}-a{build.repair_attempts}"
+    """Core accepts exactly <operation_id>-a0/-a1/-a2 (plan 8.11)."""
+    return f"{operation_id}-a{build.repair_attempts}"
+
+
+def _as_stage_failure(exc: ValueError, code: str, stage: str, scene_id: str | None) -> StageFailure:
+    return _fail(code, stage, str(exc), scene_id=scene_id)
 
 
 def _check_task(task: SceneTask) -> None:
@@ -137,12 +144,13 @@ async def _draft(task: SceneTask, runtime: Any, client: RenderWorkerClient, dir_
     return await agent.draft_json_prompt(task, runtime, previous_source, feedback)
 
 
-async def _fallback_build(task: SceneTask, runtime: Any, client: RenderWorkerClient, attempts: int, reason: str) -> SceneBuild:
-    log.warning("scene %s rev %s: using deterministic fallback template: %s", task.slot.scene_id, task.revision, reason)
-    dir_key = attempt_dir(task, "fb")
+async def _fallback_build(task: SceneTask, runtime: Any, client: RenderWorkerClient, attempt: int, reason: str) -> SceneBuild:
+    """Deterministic template as the last corrective attempt, in its own attempt slot a<attempt>."""
+    log.warning("scene %s rev %s: using deterministic fallback template (a%s): %s", task.slot.scene_id, task.revision, attempt, reason)
+    dir_key = attempt_dir(task, attempt)
     build = await _save_build(
         task, runtime, dir_key, FALLBACK_SOURCE, f"Deterministic fallback layout for scene {task.slot.index} (agent output unusable).",
-        _default_cues(task), "fallback", min(2, attempts), [f"FALLBACK: {reason}"[:2000]],
+        _default_cues(task), "fallback", attempt, [f"FALLBACK: {reason}"[:2000]],
     )
     diags = await _validate(task, client, build)
     if diags:
@@ -151,9 +159,25 @@ async def _fallback_build(task: SceneTask, runtime: Any, client: RenderWorkerCli
     return build
 
 
-async def _agent_loop(task: SceneTask, runtime: Any, client: RenderWorkerClient, start_attempt: int, previous_source: str | None, feedback: list[str] | None) -> SceneBuild:
-    """Generate -> validate -> repair, at most two corrective attempts in total; fallback when exhausted."""
+def _exhausted(task: SceneTask, stage: str, why: str) -> StageFailure:
+    return _fail("SCENE_REPAIRS_EXHAUSTED", stage, f"no corrective attempt left (SCENE_REPAIR_ATTEMPTS): {why}"[:8000], retryable=True, scene_id=task.slot.scene_id)
+
+
+async def _next_attempt(task: SceneTask, runtime: Any, client: RenderWorkerClient, attempt: int, previous_source: str | None, feedback: list[str], *, allow_agent: bool, stage: str) -> SceneBuild:
+    """Spend corrective attempt slot `attempt`: an agent repair while more slots remain after it,
+    the deterministic fallback in the last slot, a stage error when none is left."""
     max_repairs = _max_repairs(runtime)
+    why = " | ".join(feedback[:3])
+    if attempt > max_repairs:
+        raise _exhausted(task, stage, why)
+    if allow_agent and attempt < max_repairs:
+        return await _agent_loop(task, runtime, client, attempt, previous_source, feedback)
+    return await _fallback_build(task, runtime, client, attempt, f"after {attempt} failed attempt(s): {why}")
+
+
+async def _agent_loop(task: SceneTask, runtime: Any, client: RenderWorkerClient, start_attempt: int, previous_source: str | None, feedback: list[str] | None) -> SceneBuild:
+    """Generate -> validate -> repair. Attempt slots a0..a2 (<= SCENE_REPAIR_ATTEMPTS corrective ones);
+    the last corrective slot is the deterministic fallback."""
     attempt = start_attempt
     diags: list[str] = list(feedback or [])
     while True:
@@ -181,8 +205,8 @@ async def _agent_loop(task: SceneTask, runtime: Any, client: RenderWorkerClient,
             previous_source = draft.source_code
         else:
             await runtime.write_json(f"{dir_key}/validation.json", {"valid": False, "diagnostics": diags})
-        if attempt >= max_repairs:
-            return await _fallback_build(task, runtime, client, attempt, f"agent output failed after {attempt} repair attempt(s): " + " | ".join(diags[:3]))
+        if attempt + 1 >= _max_repairs(runtime):
+            return await _next_attempt(task, runtime, client, attempt + 1, previous_source, diags, allow_agent=False, stage="scene_generate")
         attempt += 1
         feedback = diags
 
@@ -202,8 +226,23 @@ async def route_edit(request: EditRoutingRequest, runtime: Any) -> EditIntent:
 
 
 async def generate_scene(request: SceneTask, runtime: Any) -> SceneBuild:
+    build = await _generate(request, runtime)
+    try:
+        validate_build(build, request.context, request.slot, request.revision)
+    except ValueError as e:
+        raise _as_stage_failure(e, "SCENE_BUILD_INVALID", "scene_generate", request.slot.scene_id) from e
+    return build
+
+
+async def _generate(request: SceneTask, runtime: Any) -> SceneBuild:
     task = request
     _check_task(task)
+    try:
+        # Structure + hashes. The live/mock content policy is core's (validate_context(live=...) before
+        # dispatch); applying it here would block running the real agent on explicit mock fixtures.
+        validate_context(task.context)
+    except ValueError as e:
+        raise _as_stage_failure(e, "SCENE_CONTEXT_INVALID", "scene_generate", task.slot.scene_id) from e
     client = RenderWorkerClient.from_runtime(runtime)
     # Recorded so a later preview repair of this operation keeps the user's correction.
     await runtime.write_json(f"{operation_dir(task)}/task.json", {
@@ -243,18 +282,22 @@ async def render_preview(request: PreviewRequest, runtime: Any) -> ScenePreviewO
         if result.status == "completed":
             if result.video is None or result.duration_frames != expected:
                 raise _fail("PREVIEW_OUTPUT_INVALID", "scene_preview", f"preview has {result.duration_frames} frames, expected {expected}", scene_id=slot.scene_id)
+            try:
+                validate_build(build, request.context, slot, build.revision)
+                validate_render(result, request.project_id, expected)
+            except ValueError as e:
+                raise _as_stage_failure(e, "PREVIEW_OUTPUT_INVALID", "scene_preview", slot.scene_id) from e
             return ScenePreviewOutcome(project_id=request.project_id, build=build, render=result)
         err = result.error or PipelineError(code="RENDER_FAILED", stage="scene_preview", message="worker reported failure without an error", retryable=True, scene_id=slot.scene_id)
         if err.code not in SCENE_FAULT_CODES:
             raise StageFailure(err)
-        if build.generation_mode == "agent" and build.repair_attempts < _max_repairs(runtime) and not runtime.mock_mode:
-            source = runtime.path(build.source.key).read_text()
-            build = await _agent_loop(task, runtime, client, build.repair_attempts + 1, source, [f"Preview render failed ({err.code}): {err.message}"])
-            continue
-        if build.generation_mode != "fallback":
-            build = await _fallback_build(task, runtime, client, build.repair_attempts, f"preview render failed: {err.code}: {err.message[:500]}")
-            continue
-        raise StageFailure(err)
+        if build.generation_mode == "fallback":
+            raise StageFailure(err)
+        build = await _next_attempt(
+            task, runtime, client, build.repair_attempts + 1, runtime.path(build.source.key).read_text(),
+            [f"Preview render failed ({err.code}): {err.message}"],
+            allow_agent=build.generation_mode == "agent" and not runtime.mock_mode, stage="scene_preview",
+        )
 
 
 async def render_final(request: FinalRenderRequest, runtime: Any) -> RenderResult:
@@ -271,6 +314,10 @@ async def render_final(request: FinalRenderRequest, runtime: Any) -> RenderResul
         await runtime.report_progress(project_id=request.project_id, job_id=request.job_id, stage="final", progress=p, scene_id=None)
 
     result = await client.run(request, progress)
-    if result.status == "completed" and result.video is not None and result.duration_frames == 1800:
+    if result.status == "completed":
+        try:
+            validate_render(result, request.project_id, 1800)
+        except ValueError as e:
+            raise _as_stage_failure(e, "FINAL_OUTPUT_INVALID", "final", None) from e
         return result
     raise StageFailure(result.error or PipelineError(code="FINAL_OUTPUT_INVALID", stage="final", message=f"final render returned {result.duration_frames} frames", retryable=True))
