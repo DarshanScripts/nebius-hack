@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { mkdir } from 'node:fs/promises'
 import { chromium } from 'playwright'
 
 const origin = process.env.SMOKE_URL || 'http://127.0.0.1:5173'
@@ -37,8 +38,14 @@ const snapshot = ready => ({
 let created = false
 let projectReads = 0
 const requests = []
+let showFailure = false
+let delayedRead = false
+let releaseRead
+const readGate = new Promise(resolve => { releaseRead = resolve })
+await mkdir('.artifacts', { recursive: true })
 
-await page.route('**/api/**', async route => {
+// Vite dev also serves /src/api/*.ts modules; only intercept backend routes.
+await page.route(/\/api\/(?:projects|health|artifacts)(?:\/|\?|$)/, async route => {
   const request = route.request()
   const url = new URL(request.url())
   const path = url.pathname
@@ -51,7 +58,20 @@ await page.route('**/api/**', async route => {
     created = true
     return reply(202, snapshot(false))
   }
-  if (path === `/api/projects/${projectId}` && request.method() === 'GET') return reply(200, snapshot(++projectReads >= 2))
+  if (path === `/api/projects/${projectId}` && request.method() === 'GET') {
+    if (delayedRead) await readGate
+    const next = snapshot(++projectReads >= 2)
+    if (showFailure) Object.assign(next, {
+      status: 'failed', active_job_id: null,
+      error: { code: 'LLM_UNAVAILABLE', stage: 'dialogue', message: 'The dialogue service is taking a little longer. Please try again.', retryable: true, scene_id: null },
+    })
+    return reply(200, next)
+  }
+  if (path === `/api/projects/${projectId}/retry` && request.method() === 'POST') {
+    assert.deepEqual(request.postDataJSON(), { stage: 'dialogue' })
+    showFailure = false
+    return reply(202, snapshot(true))
+  }
   if (path === `/api/projects/${projectId}/events` && request.method() === 'GET') {
     const after = Number(url.searchParams.get('after'))
     return reply(200, { events: after ? [] : [{ schema_version: '1.0', project_id: projectId, event_id: 1, at: now, type: 'research.ready', scene_id: null, revision: null, message: 'Research ready', progress: null }], next_after: 1 })
@@ -61,6 +81,8 @@ await page.route('**/api/**', async route => {
 
 try {
   await page.goto(origin)
+  assert.equal(await page.locator('.demo-mode-banner').count(), 0)
+  await page.getByLabel('Your topic').fill(topic)
   await page.getByRole('button', { name: 'Create reel' }).click()
   await page.getByText('HTTP fixture research arrived after project creation.').waitFor({ timeout: 10000 })
   assert.equal(await page.locator('.scene-card').count(), 6)
@@ -70,7 +92,22 @@ try {
   assert.ok(requests.includes('POST /api/projects'))
   assert.ok(requests.includes(`GET /api/projects/${projectId}`))
   assert.ok(requests.includes(`GET /api/projects/${projectId}/events`))
-  console.log(JSON.stringify({ http_create: true, progressive_snapshot: true, refresh_restored: true, event_deduplicated: true, scene_slots: 6 }))
+  // The loading and recoverable error surfaces use the same theme as the editor.
+  delayedRead = true
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.getByRole('heading', { name: 'Opening your story…' }).waitFor()
+  await page.screenshot({ path: '.artifacts/theme-loading.png' })
+  delayedRead = false
+  releaseRead()
+  await page.getByText('HTTP fixture research arrived after project creation.').waitFor()
+  showFailure = true
+  await page.reload()
+  await page.getByRole('button', { name: 'Retry stage' }).waitFor()
+  await page.screenshot({ path: '.artifacts/theme-stage-error.png' })
+  await page.getByRole('button', { name: 'Retry stage' }).click()
+  await page.getByRole('button', { name: 'Retry stage' }).waitFor({ state: 'hidden' })
+  assert.ok(requests.includes(`POST /api/projects/${projectId}/retry`))
+  console.log(JSON.stringify({ http_create: true, progressive_snapshot: true, refresh_restored: true, event_deduplicated: true, scene_slots: 6, loading_state: true, stage_error_retry: true }))
 } finally {
   await browser.close()
 }
