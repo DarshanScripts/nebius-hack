@@ -99,6 +99,8 @@ def test_live_research_polls_normalizes_and_repairs(tmp_path, monkeypatch):
     assert [c.claim_id for c in b.claims] == ["c001", "c002", "c003", "c004"]
     assert "## Overview" in b.report_markdown and not b.is_mock
     assert "src099" in rt.calls[1][-1]["content"]  # repair prompt names the problem
+    # Tavily's 3rd entry was a duplicate and the 4th was dropped; citation numbers must survive renumbering.
+    assert "src002 = report [2]" in rt.calls[0][1]["content"]
     assert json.loads(rt.path(b.raw_response.key).read_text())["status"] == "completed"
     assert rt.path(f"projects/{PID}/research/initial.json").exists()
 
@@ -168,7 +170,7 @@ def test_live_dialogue_repairs_then_validates(tmp_path):
                         previous_script=mock_script, revision_instruction="Shorter please"), rt))
     assert script.script_revision == 2 and len(rt.calls) == 2
     assert "Shorter please" in rt.calls[0][1]["content"]
-    assert rt.path(f"projects/{PID}/script/v2/script.json").exists()
+    assert not rt.path(f"projects/{PID}/script/v2/script.json").exists()  # core owns this file
 
     rt = runtime(tmp_path, mock=False, replies=[bad, bad, bad])
     with pytest.raises(StageFailure) as e:
@@ -271,3 +273,46 @@ def test_redirect_to_private_address_is_refused(monkeypatch):
             return await images.download(c, "https://img.example/a.png")
     img, why = asyncio.run(go())
     assert img is None and "refused" in why and "169.254" in why
+
+
+def test_live_dialogue_retry_and_core_rule(tmp_path):
+    _, research, mock_script = mock_bundle(tmp_path)
+    turns = [{"speaker_id": t.speaker_id, "intent": t.intent, "text": t.text, "claim_ids": t.claim_ids}
+             for t in mock_script.turns]
+    turns[6]["text"] = "Relay servers. Calls go straight from phone to phone."  # uncited statement, not a question
+    fixed = [dict(t) for t in turns]
+    fixed[6]["text"] = "Relay servers? Don't calls go straight from phone to phone?"
+    rt = runtime(tmp_path, mock=False, replies=[{"title": "T", "turns": turns}, {"title": "T", "turns": fixed}])
+    asyncio.run(service.generate_dialogue(DialogueRequest(project_id=PID, research=research, characters=CHARACTERS), rt))
+    assert "d007 (challenge)" in rt.calls[1][-1]["content"]
+
+
+def test_live_images_retry_uses_fresh_attempt_folder(tmp_path, monkeypatch):
+    _, research, script = mock_bundle(tmp_path)
+    calls = iter(range(100))
+    mock_tavily(monkeypatch, lambda req: httpx.Response(200, json={"images": ["https://img.example/a.png"],
+                                                                  "response_time": next(calls)}))
+    monkeypatch.setattr(images, "make_client", lambda: httpx.AsyncClient(transport=httpx.MockTransport(
+        lambda req: httpx.Response(200, content=png()))))
+
+    async def public(url):
+        return True
+    monkeypatch.setattr(images, "_public_host", public)
+    plan = lambda tag: {"queries": [{"scene_index": i, "dialogue_ids": [], "query": f"{tag}{i}", "reason": "r"}
+                                    for i in range(1, 7)]}
+    rt = runtime(tmp_path, mock=False, replies=[plan("a"), plan("b")])
+    req = ImageRequest(project_id=PID, research=research, script=script)
+    first = asyncio.run(service.find_images(req, rt))
+    second = asyncio.run(service.find_images(req, rt))  # immutable runtime would raise if keys were reused
+    assert first.selections[0].asset.key.endswith("/v1/a1/s01.png")
+    assert second.selections[0].asset.key.endswith("/v1/a2/s01.png")
+
+
+def test_mock_outputs_pass_core_validators(tmp_path):
+    validation = pytest.importorskip("contracts.validation")
+    rt, research, script = mock_bundle(tmp_path)
+    imgs = asyncio.run(service.find_images(ImageRequest(project_id=PID, research=research, script=script), rt))
+    validation.validate_research(research)
+    validation.validate_script(script, research)
+    validation.validate_images(imgs, script)
+    validation.validate_artifacts(imgs, rt.artifact_root, PID)

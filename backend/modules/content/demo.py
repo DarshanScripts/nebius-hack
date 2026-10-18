@@ -59,14 +59,19 @@ class DemoRuntime:
 
     async def write_bytes(self, key: str, data: bytes, media_type: str) -> ArtifactRef:
         p = self.path(key)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        tmp = p.with_suffix(p.suffix + ".tmp")
-        tmp.write_bytes(data)
-        tmp.replace(p)
+        if p.exists():
+            # Same immutability rule as core's AppRuntime: identical rewrites are fine, changes are not.
+            if p.read_bytes() != data:
+                raise ValueError(f"Refusing to overwrite immutable artifact: {key}")
+        else:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            tmp = p.with_suffix(p.suffix + ".tmp")
+            tmp.write_bytes(data)
+            tmp.replace(p)
         return ArtifactRef(key=key, media_type=media_type, sha256=hashlib.sha256(data).hexdigest(), size_bytes=len(data))
 
     async def write_json(self, key: str, value: Any) -> ArtifactRef:
-        data = json.dumps(value, ensure_ascii=False, indent=2).encode("utf-8")
+        data = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
         return await self.write_bytes(key, data, "application/json")
 
     async def structured(self, *, messages, schema):
@@ -97,9 +102,12 @@ async def main(args: argparse.Namespace) -> int:
     settings = _load_env(Path(".env"))
     rt = DemoRuntime(Path(args.output), args.mock, settings)
     research = await run_research(ResearchRequest(project_id=args.project_id, topic=args.topic), rt)
+    await rt.write_json(f"projects/{args.project_id}/research/bundle.json", research.model_dump(mode="json"))  # as core does
     print(f"research: {len(research.sources)} sources, {len(research.claims)} claims, mock={research.is_mock}, "
           f"request_id={research.tavily_request_id}")
     script = await generate_dialogue(DialogueRequest(project_id=args.project_id, research=research, characters=CHARACTERS), rt)
+    await rt.write_json(f"projects/{args.project_id}/script/v{script.script_revision}/script.json",
+                        script.model_dump(mode="json"))  # as core does
     words = sum(checks.word_count(t.text) for t in script.turns)
     print(f"dialogue: rev {script.script_revision}, {len(script.turns)} turns, {words} words, title={script.title!r}")
     for t in script.turns:

@@ -15,9 +15,9 @@ LLM calls go through `runtime.structured(...)` (configured Nemotron endpoint); n
 
 | Callable | Live behaviour | Artifacts (under `ARTIFACT_ROOT`) |
 | --- | --- | --- |
-| `run_research` | `POST /research` (`input`, `TAVILY_RESEARCH_MODEL`, `stream:false`), saves `initial.json` with the `request_id`, polls `GET /research/{id}` (`pending`/`in_progress`/`processing` = running; unknown status = error). Indexes source URLs as `src001…`, then Nemotron turns the report into `ResearchNotes` claims against those IDs. | `projects/<id>/research/{initial,raw,bundle}.json` |
-| `generate_dialogue` | Nemotron writes 12 turns; ids/order/scene are assigned in code. Checked: alternating Sundar-first speakers, valid claim IDs, every `answer` cites a claim, no stage directions, 120–135 words (110–145 accepted). Up to 2 repair rounds with the exact problems. Supports `previous_script` + `revision_instruction`. | `projects/<id>/script/v<rev>/script.json` |
-| `find_images` | Nemotron `ImageQueryPlan` (one query per scene; `dialogue_ids` overwritten from the script; deterministic fallback queries if planning fails). Tavily `/search` with `include_images` + `include_image_descriptions`, all six queries, ≤3 concurrent. Downloads the first usable candidate. | `projects/<id>/images/v<rev>/{plan.json,search/sNN.json,sNN.<png\|jpg\|webp>,bundle.json}` |
+| `run_research` | `POST /research` (`input`, `TAVILY_RESEARCH_MODEL`, `stream:false`), saves `initial.json` with the `request_id`, polls `GET /research/{id}` (`pending`/`in_progress`/`processing` = running; unknown status = error). Indexes source URLs as `src001…` (each listed with Tavily's original `[n]` citation number so dedupe cannot shift citations), then Nemotron turns the report into `ResearchNotes` claims against those IDs. | `projects/<id>/research/[attemptN/]{initial,raw,failed}.json` (core writes `research/bundle.json`) |
+| `generate_dialogue` | Nemotron writes 12 turns; ids/order/scene are assigned in code. Checked: alternating Sundar-first speakers, valid claim IDs, every non-question turn cites a claim unless it ends with `?` (same rule as core's `validate_script`), no stage directions, 120–135 words (110–145 accepted). Up to 2 repair rounds with the exact problems. Supports `previous_script` + `revision_instruction`. | none (core writes `script/v<rev>/script.json`) |
+| `find_images` | Nemotron `ImageQueryPlan` (one query per scene; `dialogue_ids` overwritten from the script; deterministic fallback queries if planning fails). Tavily `/search` with `include_images` + `include_image_descriptions`, all six queries, ≤3 concurrent. Downloads the first usable candidate; decoding runs in a worker thread. Each live attempt gets a fresh `aN/` folder because artifacts are immutable. | `projects/<id>/images/v<rev>/aN/{plan.json,search/sNN.json,sNN.<png\|jpg\|webp>,bundle.json}` (mock: `images/v<rev>/`) |
 
 ### Grounding and safety rules implemented
 - Claims citing unknown sources or `inference` without a caveat are sent back for repair, and dropped if still invalid; fewer than 3 valid claims → `RESEARCH_UNGROUNDED`. Claim IDs are renumbered `c001…`.
@@ -27,7 +27,7 @@ LLM calls go through `runtime.structured(...)` (configured Nemotron endpoint); n
 - Images: http(s) only; every hop (redirects followed manually, max 3) must resolve to public IPs only; 8 MB cap, 20 s total per download; must decode with Pillow as PNG/JPEG/WebP ≥200 px (SVG/GIF rejected). `source_page_url` is only set if Tavily returned one — never invented. Failed scenes are `status:"unavailable"` with a reason; one scene's failure never affects the others.
 
 ### Mock mode (`runtime.mock_mode`)
-Fixtures in `fixtures/` only, no provider or LLM calls: `src001/src002` "Mock…" sources on example.com, claims `c001…c006` marked as demonstration data, 12 turns (133 words, answers cite `c001…c006`), `is_mock: true`, and image selections for scenes 1,2,3,5,6 (generated, labelled "MOCK" PNGs) with scene 4 `unavailable` to exercise the vector fallback.
+Fixtures in `fixtures/` only, no provider or LLM calls: `src001/src002` "Mock…" sources on example.com, claims `c001…c006` marked as demonstration data, 12 turns (132 words, answers cite `c001…c006`), `is_mock: true`, and image selections for scenes 1,2,3,5,6 (generated, labelled "MOCK" PNGs) with scene 4 `unavailable` to exercise the vector fallback.
 
 ## Commands
 
@@ -36,15 +36,16 @@ uv venv .venv --python 3.11 && uv pip install --python .venv/bin/python pydantic
 export PYTHONPATH="$PWD/.bootstrap:$PWD"     # drop .bootstrap once contracts/models.py is on main
 
 python -m backend.modules.content.demo --mock --output output/demos/content     # fixtures only
-python -m pytest backend/modules/content/tests -q                                # 17 tests
+python -m pytest backend/modules/content/tests -q                                # 20 tests (1 skips until contracts/validation.py is on main)
 python -m backend.modules.content.demo --output output/demos/content --topic "How does WhatsApp voice calling infrastructure work?"   # live
 ```
 
-The live demo reads root `.env` (`TAVILY_*`, `NEMOTRON_BASE_URL`, `NEMOTRON_API_KEY`, `NEMOTRON_MODEL`) and uses a small local `DemoRuntime` (json_prompt + `model_validate_json`, 2 corrective attempts). Rerunning after an interruption resumes the saved Tavily request ID.
+The live demo reads root `.env` (`TAVILY_*`, `NEMOTRON_BASE_URL`, `NEMOTRON_API_KEY`, `NEMOTRON_MODEL`) and uses a small local `DemoRuntime` (json_prompt + `model_validate_json`, 2 corrective attempts; refuses to overwrite artifacts with different bytes, like core's `AppRuntime`). Rerunning after an interruption resumes the saved Tavily request ID.
 
 ## Results (2026-10-18)
-- Mock demo: 2 sources, 6 claims, 12 alternating turns / 133 words in six scenes, 5 selected images + 1 unavailable; artifacts written under `output/demos/content/projects/demo-whatsapp-001/`.
-- `pytest`: 17 passed — redirect-to-metadata-IP refusal; permanent failures (no sources, unknown status) start a new attempt while a 401 keeps the request for resume; mock pipeline; live research polling (`in_progress`→`processing`→`completed`), structured-content conversion, source dedupe, claim repair; resume without new POST; retryable timeout; failed-attempt directory; unknown status / 401; 429 + `Retry-After`; dialogue repair + revision + failure; SSRF refusals (loopback, RFC1918, metadata IP, file://) and decode checks; live image selection with a search error and an undecodable candidate.
+- **Integration with `origin/feat/m1-platform` (d3dfba6)**: module copied into that branch: my 20 tests + core's 10 pass; the mock outputs pass core's `validate_research`/`validate_script`/`validate_images`/`validate_artifacts` through `AppRuntime`; a live-mode image retry under the immutable `AppRuntime` succeeds; core's `Coordinator` with this module (voice from core fixtures) completes research → dialogue → images → voice → timeline `[0,273,543,813,1083,1353,1800]` and stops only at `MODULE_UNAVAILABLE` for scenes (member 4 not merged).
+- Mock demo: 2 sources, 6 claims, 12 alternating turns / 132 words in six scenes, 5 selected images + 1 unavailable; artifacts written under `output/demos/content/projects/demo-whatsapp-001/`.
+- `pytest`: 19 passed + 1 skipped locally (core-validator parity runs once `contracts/validation.py` exists) — live image retry in a fresh folder; core claim rule triggers repair; citation numbers survive source dedupe; redirect-to-metadata-IP refusal; permanent failures (no sources, unknown status) start a new attempt while a 401 keeps the request for resume; mock pipeline; live research polling (`in_progress`→`processing`→`completed`), structured-content conversion, source dedupe, claim repair; resume without new POST; retryable timeout; failed-attempt directory; unknown status / 401; 429 + `Retry-After`; dialogue repair + revision + failure; SSRF refusals (loopback, RFC1918, metadata IP, file://) and decode checks; live image selection with a search error and an undecodable candidate.
 
 ## Notes for member 1 (integration)
 - Settings are read from `runtime.settings` by env name (`TAVILY_API_KEY`, `TAVILY_RESEARCH_MODEL`, `TAVILY_POLL_INTERVAL_SECONDS`, `TAVILY_RESEARCH_TIMEOUT_SECONDS`); lowercase keys also work.
@@ -52,6 +53,8 @@ The live demo reads root `.env` (`TAVILY_*`, `NEMOTRON_BASE_URL`, `NEMOTRON_API_
 - `runtime.structured` is never called in mock mode.
 - Not a contract change, just a suggestion: `ResearchRequest` has no `job_id`, so research polling does not call `report_progress`.
 - No shared-contract changes were needed.
+- **Please add `pillow>=11` to `pyproject.toml`** (listed in `dependencies.txt`). PIL is imported lazily, so research and dialogue still load without it, but image decoding needs it.
+- Core owns `research/bundle.json` and `script/v<rev>/script.json`; this module no longer writes them, so retries never collide with immutable artifacts.
 
 ## Blockers / not verified
 - **No live run yet**: there are no Tavily/NVIDIA keys in this checkout. The live HTTP paths are tested only against mocked transports. The real Nemotron structured output and Tavily response shapes still need one live run (the command above).

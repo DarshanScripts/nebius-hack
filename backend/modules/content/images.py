@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from urllib.parse import urljoin, urlsplit
 
 import httpx
-from PIL import Image
 
 MAX_BYTES = 8 * 1024 * 1024
 TIMEOUT_S = 15.0
@@ -66,6 +65,7 @@ async def _public_host(url: str) -> bool:
 
 
 def decode(data: bytes) -> Downloaded | None:
+    from PIL import Image  # lazy: research/dialogue must still import if Pillow is missing
     try:
         with Image.open(io.BytesIO(data)) as img:
             fmt, size = img.format, img.size
@@ -101,7 +101,7 @@ async def download(client: httpx.AsyncClient, url: str) -> tuple[Downloaded | No
                         return None, "image too large"
         except (httpx.HTTPError, ValueError) as exc:
             return None, f"download failed: {type(exc).__name__}"
-        img = decode(bytes(buf))
+        img = await asyncio.to_thread(decode, bytes(buf))  # CPU-bound; keep the API's single event loop free
         return (img, "ok") if img else (None, f"not a decodable PNG/JPEG/WebP of at least {MIN_SIDE}px")
     return None, "too many redirects"
 

@@ -8,7 +8,6 @@ from contracts.models import Claim, DialogueScript, ImageBundle, ResearchBundle
 SPEAKERS = ("sundar", "jensen")
 MIN_WORDS, MAX_WORDS = 110, 145  # target 120-135; small tolerance before forcing a repair
 STAGE_DIRECTION = re.compile(r"\[[^\]]*\]|\([^)]*\)|\*[^*]+\*|^\s*(sundar|jensen|pichai|huang)\b[^:]{0,20}:", re.I)
-FACTUAL_INTENTS = {"answer"}
 
 
 def word_count(text: str) -> int:
@@ -45,8 +44,10 @@ def script_problems(script: DialogueScript, research: ResearchBundle) -> list[st
         unknown = set(t.claim_ids) - claim_ids
         if unknown:
             problems.append(f"{t.dialogue_id} references unknown claims {sorted(unknown)}")
-        if t.intent in FACTUAL_INTENTS and not t.claim_ids:
-            problems.append(f"{t.dialogue_id} is an answer and must cite at least one claim_id")
+        # Same rule as core's contracts.validation.validate_script.
+        if t.intent != "question" and not t.text.rstrip().endswith("?") and not t.claim_ids:
+            problems.append(f"{t.dialogue_id} ({t.intent}) states something, so it must cite at least one claim_id "
+                            "(only questions or turns ending with '?' may cite none)")
         if STAGE_DIRECTION.search(t.text):
             problems.append(f"{t.dialogue_id} contains stage directions or a speaker label; spoken words only")
     total = sum(word_count(t.text) for t in script.turns)

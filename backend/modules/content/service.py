@@ -82,10 +82,12 @@ async def _structured_checked(
 
 # ---------------------------------------------------------------- research
 
-def _index_sources(raw_sources: Any) -> list[Source]:
+def _index_sources(raw_sources: Any) -> tuple[list[Source], list[int]]:
+    """Returns sources and, per source, its 1-based position in Tavily's list (the report's [n] citation)."""
     sources: list[Source] = []
+    refs: list[int] = []
     seen: set[str] = set()
-    for item in raw_sources if isinstance(raw_sources, list) else []:
+    for pos, item in enumerate(raw_sources if isinstance(raw_sources, list) else [], start=1):
         if not isinstance(item, dict):
             continue
         url = item.get("url")
@@ -95,7 +97,8 @@ def _index_sources(raw_sources: Any) -> list[Source]:
         title = item.get("title") if isinstance(item.get("title"), str) and item["title"].strip() else url
         favicon = item.get("favicon") if isinstance(item.get("favicon"), str) else None
         sources.append(Source(source_id=f"src{len(sources) + 1:03d}", title=title, url=url, favicon=favicon))
-    return sources
+        refs.append(pos)
+    return sources, refs
 
 
 def _to_markdown(content: Any, depth: int = 2) -> str:
@@ -117,7 +120,8 @@ RESEARCH_GUIDANCE = (
 
 NOTES_SYSTEM = (
     "You turn a research report into citable claims for a 60-second educational video. "
-    "Use only the numbered sources given; every claim cites at least one of their source_ids. "
+    "Use only the sources given; every claim cites at least one of their source_ids. A report citation [n] "
+    "refers to the source listed as 'report [n]'. "
     "evidence_type: 'documented' only when a cited source states it about this product; "
     "'general_industry_practice' for how such systems usually work; 'inference' otherwise, always with a caveat. "
     "Never present an undocumented proprietary detail (exact codec, topology, region, vendor) as documented. "
@@ -126,9 +130,10 @@ NOTES_SYSTEM = (
 )
 
 
-async def _research_notes(runtime: Runtime, topic: str, report: str, sources: list[Source]) -> ResearchNotes:
+async def _research_notes(runtime: Runtime, topic: str, report: str, sources: list[Source],
+                          refs: list[int]) -> ResearchNotes:
     source_ids = {s.source_id for s in sources}
-    listing = "\n".join(f"{s.source_id} | {s.title} | {s.url}" for s in sources)
+    listing = "\n".join(f"{s.source_id} = report [{n}] | {s.title} | {s.url}" for s, n in zip(sources, refs))
     messages = [
         {"role": "system", "content": NOTES_SYSTEM},
         {"role": "user", "content": f"Topic: {topic}\n\nSources:\n{listing}\n\nReport:\n{report[:MAX_REPORT_CHARS]}"},
@@ -138,6 +143,8 @@ async def _research_notes(runtime: Runtime, topic: str, report: str, sources: li
         problems = checks.claim_problems(n.claims, source_ids)
         if len(n.claims) < MIN_CLAIMS:
             problems.append(f"need at least {MIN_CLAIMS} claims")
+        if not n.summary.strip():
+            problems.append("summary is empty")
         return problems
 
     notes, _ = await _structured_checked(runtime, messages, ResearchNotes, check)
@@ -148,7 +155,7 @@ async def _research_notes(runtime: Runtime, topic: str, report: str, sources: li
         if c.claim_id not in seen and not checks.claim_problems([c], source_ids):
             kept.append(c)
         seen.add(c.claim_id)
-    if len(kept) < MIN_CLAIMS:
+    if len(kept) < MIN_CLAIMS or not notes.summary.strip():
         raise _fail("research", "RESEARCH_UNGROUNDED", f"Only {len(kept)} claims passed grounding checks", True)
     claims = [c.model_copy(update={"claim_id": f"c{i:03d}"}) for i, c in enumerate(kept, start=1)]
     return notes.model_copy(update={"claims": claims})
@@ -199,7 +206,7 @@ async def run_research(request: ResearchRequest, runtime: Runtime) -> ResearchBu
         d = _attempt_dir(runtime, base)
         raw = await _tavily_raw(request, runtime, d)
 
-    sources = _index_sources(raw.get("sources"))
+    sources, refs = _index_sources(raw.get("sources"))
     report = _to_markdown(raw.get("content")).strip()
     if not sources or not report:
         error = _fail("research", "RESEARCH_NO_SOURCES" if not sources else "RESEARCH_EMPTY",
@@ -213,7 +220,7 @@ async def run_research(request: ResearchRequest, runtime: Runtime) -> ResearchBu
     if runtime.mock_mode:
         notes = ResearchNotes.model_validate(_fixture("research_notes.json"))
     else:
-        notes = await _research_notes(runtime, request.topic, report, sources)
+        notes = await _research_notes(runtime, request.topic, report, sources, refs)
 
     raw_ref = _ref_for(runtime, f"{d}/raw.json")
     bundle = ResearchBundle(
@@ -225,8 +232,7 @@ async def run_research(request: ResearchRequest, runtime: Runtime) -> ResearchBu
     problems = checks.claim_problems(bundle.claims, {s.source_id for s in sources})
     if problems:
         raise _fail("research", "RESEARCH_INVALID", "; ".join(problems))
-    await runtime.write_json(f"{d}/bundle.json", bundle.model_dump(mode="json"))
-    return bundle
+    return bundle  # core writes research/bundle.json after its own validation
 
 
 def _ref_for(runtime: Runtime, key: str) -> ArtifactRef:
@@ -260,8 +266,8 @@ Rules:
 - 120 to 135 spoken words in total. Short hook first, then skeptical questions, concise explanations,
   at least one challenge/correction, and a closing takeaway (intent "takeaway") in turn 12.
 - intent is one of hook, question, answer, challenge, takeaway.
-- Only state facts found in the claims below and put their claim_ids on that turn. Every "answer" turn cites at least one claim.
-  Genuine questions may cite none. Keep caveats: never present an inference or unknown proprietary detail as fact.
+- Only state facts found in the claims below and put their claim_ids on that turn. Every turn that is not a question
+  (hook, answer, challenge, takeaway) cites at least one claim unless its text ends with "?". Keep caveats: never present an inference or unknown proprietary detail as fact.
 - Spoken words only: no stage directions, brackets, parentheses, emojis, speaker labels or markdown.
   Write numbers and acronyms the way they should be spoken.
 - title: a short reel title (max 8 words).
@@ -309,10 +315,7 @@ async def generate_dialogue(request: DialogueRequest, runtime: Runtime) -> Dialo
         script = _to_script(draft, request)
     if problems:
         raise _fail("dialogue", "DIALOGUE_INVALID", "; ".join(problems[:8]), True)
-
-    await runtime.write_json(f"projects/{request.project_id}/script/v{request.script_revision}/script.json",
-                             script.model_dump(mode="json"))
-    return script
+    return script  # core writes script/v<rev>/script.json after its own validation
 
 
 # ---------------------------------------------------------------- images
@@ -410,6 +413,11 @@ async def find_images(request: ImageRequest, runtime: Runtime) -> ImageBundle:
                 description="MOCK generated placeholder diagram (fixture, not a search result)"))
     else:
         key = _tavily_key(runtime, "images")
+        # Artifacts are immutable and live output differs per run, so every live attempt gets a fresh folder.
+        n = 1
+        while runtime.path(f"{base}/a{n}/plan.json").exists():
+            n += 1
+        base = f"{base}/a{n}"
         queries = await _plan_queries(request, runtime)
         await runtime.write_json(f"{base}/plan.json", {"queries": [q.model_dump(mode="json") for q in queries]})
         sem = asyncio.Semaphore(SEARCH_CONCURRENCY)
