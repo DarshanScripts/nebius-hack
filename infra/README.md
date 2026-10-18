@@ -47,11 +47,13 @@ work?” was created through the cloud editor. Tavily returned 16 sources and
 12 grounded claims; Nemotron generated 12 dialogue turns; image search then
 started. This is **not yet a completed cloud reel**. A previous local mock
 pipeline completed a real Remotion render, but live speech, scenes, and final
-video still require acceptance. The PNGs arrived after project creation; the
-remote source now contains a character upgrade path, but the running API
-process has not yet loaded it. Inspect the project context before restarting
-the API and resuming the first incomplete stage. Do not expose the loopback
-ports publicly or remove bearer checks.
+video still require acceptance. The PNGs arrived after project creation, and
+that project's locked scene context has null images. The API has since been
+restarted with an upgrade path for PNGs added before timeline lock. Its scene
+agents were switched to one structured Nemotron call at a time after parallel
+ReAct calls timed out; scene 1 was retried on the original project as a check.
+A fresh project is needed for a final reel with both PNGs. Do not expose the
+loopback ports publicly or remove bearer checks.
 
 ## Recheck the existing GPU services
 

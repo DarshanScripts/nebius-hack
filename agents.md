@@ -69,17 +69,23 @@ research and dialogue and started image search. Project ID:
 `615d8640-d6c6-4338-87f4-4be723e224d1`.
 
 The character PNGs arrived after the example project was created. Its original
-`inputs/characters.json` has null images. `Coordinator.characters()` now
-attaches both later from `ASSETS_ROOT` to a new immutable
-`inputs/characters-with-images.json` **before** `context.json` is locked; this
-patch is installed in the remote source file. The running API process has not
-yet been restarted to load it, so do not assume the active project has the
-images. If `context.json` was already locked with null images, a fresh project
-is needed; `Coordinator.stitch()` refuses a live final render with error
-`CHARACTERS_MISSING`. Research and dialogue have completed in the existing
-project, so preserve them and avoid a duplicate Tavily request if possible.
-Browser control then failed because automatic approval review reported that
-the workspace was out of credits. No API restart or retry was performed.
+`inputs/characters.json` and locked `context.json` have null images, so that
+project cannot be stitched into a live reel with the supplied photos.
+`Coordinator.characters()` now attaches both later from `ASSETS_ROOT` to a
+new immutable `inputs/characters-with-images.json` **before** `context.json`
+is locked. This patch is installed remotely and the API was restarted to load
+it. A fresh project will pick up both PNGs directly; do not edit the locked
+context of the original project. `Coordinator.stitch()` refuses a live final
+render with error `CHARACTERS_MISSING` when either image is absent.
+
+The first parallel ReAct scene agents timed out (`SCENE_AGENT_UNAVAILABLE`)
+without producing previews. A scene-specific `SCENE_AGENT_MODE=single_call`
+path was added and installed remotely. The Devlab `.env` now sets that mode,
+`SCENE_AGENT_CONCURRENCY=1`, and `NEMOTRON_TIMEOUT_SECONDS=360`. The API was
+restarted and returned `/api/health` status `ok`; the original project's
+scene 1 was retried at 16:23 local time. Confirm that it succeeds before
+running six more scenes. The remote browser control recovered by opening a
+fresh tab in Brave browser ID `1` after older claimed tabs stopped attaching.
 
 No cloud final reel was produced yet. The Devlab container has no verified
 Docker/Compose; all five processes were started directly and need relaunch
@@ -90,8 +96,8 @@ frontend if needed, and get the new URL from Nebius.
 
 ## Next operator actions on Nebius
 
-1. The live example project completed Tavily research (16 sources, 12 claims) and Nemotron dialogue (12 turns), then began image search. Inspect `output/projects/615d8640-d6c6-4338-87f4-4be723e224d1/context.json` before restarting the API. If absent, restart only the existing API process to load the installed character upgrade patch, then use the editor's Retry stage action to resume from its first incomplete stage. If present, inspect whether both `characters[*].image` fields are populated; a frozen context with null images needs a fresh project. Never start another paid research request merely to inspect status.
-2. Follow speech/alignment, scene previews, and Stitch once both PNGs are present in the project context. Check listening and visual quality separately.
+1. Watch the original project's scene 1 retry. It already completed Tavily research (16 sources, 12 claims), Nemotron dialogue (12 turns), Tavily images, Chatterbox speech, and WhisperX word timing. Its locked context lacks both PNGs, so do not Stitch it. If scene 1 succeeds, create a fresh project with the now-installed PNGs and verify `characters[*].image` in its context. The normal UI create path makes a new Tavily request; avoid it if a reviewed project-reuse implementation becomes available.
+2. Follow all six scene previews and Stitch on the fresh project. Check listening and visual quality separately.
 3. Review and merge the published `feat/m1-platform` branch to `main` through the team's review path when ready; preserve all four teammate merges.
 
 Read-only remote inspection, once browser access returns:
@@ -114,14 +120,9 @@ if c.exists():
 PY
 ```
 
-If `context_locked` is false, identify the existing API PID and command first,
-then stop and relaunch only that process using the API command in
-[infra/README.md](infra/README.md). Recovery marks the active job interrupted;
-click the editor's Retry stage button. On retry, the upgraded code writes
-`inputs/characters-with-images.json` and reuses the existing research and
-dialogue. If `context_locked` is true with missing images, the original run
-must finish or be inspected, then a fresh project should be created with the
-now-installed PNGs.
+The original project is already `context_locked: true` with both images false;
+this was confirmed from the Devlab filesystem after API recovery. A fresh
+project is needed for a final reel with the supplied PNGs.
 
 ## Secret handling
 

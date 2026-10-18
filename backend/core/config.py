@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     nemotron_model: str = "nvidia/nemotron-3.5-super-vl-120b-a12b"
     nemotron_structured_mode: Literal["json_prompt", "tool_calling"] = "json_prompt"
     nemotron_timeout_seconds: float = Field(default=180, gt=0)
+    scene_agent_mode: Literal["react", "single_call"] = "react"
     scene_agent_concurrency: int = Field(default=3, ge=1, le=6)
     scene_repair_attempts: int = Field(default=2, ge=0, le=2)
     voice_api_url: str = "http://localhost:8002/v1/tts"

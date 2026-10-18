@@ -125,7 +125,8 @@ def _is_transport_error(e: BaseException) -> bool:
 
 
 async def _draft(task: SceneTask, runtime: Any, client: RenderWorkerClient, dir_key: str, previous_source: str | None, feedback: list[str] | None) -> SceneDraft:
-    if agent.structured_mode(runtime) == "tool_calling":
+    scene_mode = str(setting(runtime, "SCENE_AGENT_MODE", "react")).strip().lower()
+    if scene_mode == "react" and agent.structured_mode(runtime) == "tool_calling":
         counter = {"n": 0}
 
         async def validate_candidate(source: str) -> list[str]:
