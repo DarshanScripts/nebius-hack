@@ -1,0 +1,14 @@
+{
+  "request_id": "mock-research-001",
+  "created_at": "2026-10-18T10:30:00Z",
+  "status": "completed",
+  "input": "How does WhatsApp voice calling infrastructure work?",
+  "model": "pro",
+  "content": "# MOCK research report (fixture, not a real research result)\n\nThis deterministic fixture stands in for a Tavily Deep Research report so the pipeline can run without provider calls. Its statements are demonstration data and are not verified findings about WhatsApp.\n\n## Call setup\nA signaling exchange sets up the call before any audio flows.\n\n## Media\nAudio is compressed by a codec and sent as small packets, protected by end-to-end encryption. Relay servers can forward packets when a direct path is blocked.\n\n## Adaptation\nApps adapt bitrate and conceal packet loss when networks degrade.\n\n## Unknowns\nExact codecs, server regions and vendors are not documented here.",
+  "sources": [
+    {"title": "Mock source 1: calling overview (fixture)", "url": "https://example.com/mock-source-1", "favicon": null},
+    {"title": "Mock source 2: encryption overview (fixture)", "url": "https://example.com/mock-source-2"}
+  ],
+  "response_time": 0.0,
+  "usage": {"credits": 0}
+}
