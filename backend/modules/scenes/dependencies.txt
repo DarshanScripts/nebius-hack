@@ -1,0 +1,9 @@
+# Member 4 (backend/modules/scenes) Python dependency fragment for member 1's root lock.
+# Versions below are the ones this module was developed and tested with.
+pydantic>=2.14,<3
+httpx>=0.28,<0.29
+langchain>=1.4,<2          # create_agent + ToolStrategy (tool_calling mode)
+langchain-openai>=1.7,<2   # Runtime.llm against the NEMOTRON_* OpenAI-compatible endpoint (built by core)
+# dev/test only
+pytest>=9
+# Node side: renderer/package.json + package-lock.json (all Remotion packages pinned to 4.0.534).
