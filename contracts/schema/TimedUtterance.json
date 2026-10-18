@@ -1,0 +1,26 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "dialogue_id": {
+      "title": "Dialogue Id",
+      "type": "string"
+    },
+    "start_frame": {
+      "minimum": 0,
+      "title": "Start Frame",
+      "type": "integer"
+    },
+    "end_frame": {
+      "exclusiveMinimum": 0,
+      "title": "End Frame",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "dialogue_id",
+    "start_frame",
+    "end_frame"
+  ],
+  "title": "TimedUtterance",
+  "type": "object"
+}

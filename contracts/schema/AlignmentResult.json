@@ -1,0 +1,66 @@
+{
+  "$defs": {
+    "WordTiming": {
+      "additionalProperties": false,
+      "properties": {
+        "word_id": {
+          "title": "Word Id",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "start_ms": {
+          "minimum": 0,
+          "title": "Start Ms",
+          "type": "integer"
+        },
+        "end_ms": {
+          "minimum": 0,
+          "title": "End Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "word_id",
+        "text",
+        "start_ms",
+        "end_ms"
+      ],
+      "title": "WordTiming",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "dialogue_id": {
+      "title": "Dialogue Id",
+      "type": "string"
+    },
+    "audio_sha256": {
+      "title": "Audio Sha256",
+      "type": "string"
+    },
+    "transcript": {
+      "title": "Transcript",
+      "type": "string"
+    },
+    "words": {
+      "items": {
+        "$ref": "#/$defs/WordTiming"
+      },
+      "minItems": 1,
+      "title": "Words",
+      "type": "array"
+    }
+  },
+  "required": [
+    "dialogue_id",
+    "audio_sha256",
+    "transcript",
+    "words"
+  ],
+  "title": "AlignmentResult",
+  "type": "object"
+}

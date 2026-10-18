@@ -1,0 +1,49 @@
+services:
+  chatterbox:
+    build:
+      context: ..
+      dockerfile: backend/modules/voice/gpu_services/chatterbox/Dockerfile
+    environment:
+      VOICE_API_KEY: ${VOICE_API_KEY:?Fill VOICE_API_KEY}
+      VOICE_MODEL: ${VOICE_MODEL:-chatterbox-turbo}
+      VOICE_DEVICE: cuda
+      TORCH_HOME: /models/torch
+      XDG_CACHE_HOME: /models/cache
+    volumes:
+      - chatterbox-models:/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  whisperx:
+    build:
+      context: ..
+      dockerfile: backend/modules/voice/gpu_services/whisperx/Dockerfile
+    environment:
+      ALIGNMENT_API_KEY: ${ALIGNMENT_API_KEY:?Fill ALIGNMENT_API_KEY}
+      ALIGNMENT_MODEL: ${ALIGNMENT_MODEL:-WAV2VEC2_ASR_BASE_960H}
+      ALIGNMENT_DEVICE: cuda
+      WHISPERX_TRANSCRIBE: ${WHISPERX_TRANSCRIBE:-false}
+      WHISPERX_ASR_MODEL: ${WHISPERX_ASR_MODEL:-small.en}
+      WHISPERX_COMPUTE_TYPE: ${WHISPERX_COMPUTE_TYPE:-float16}
+      TORCH_HOME: /models/torch
+      XDG_CACHE_HOME: /models/cache
+    volumes:
+      - whisperx-models:/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
+volumes:
+  chatterbox-models:
+  whisperx-models:

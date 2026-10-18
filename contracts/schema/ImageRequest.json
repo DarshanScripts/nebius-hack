@@ -1,0 +1,327 @@
+{
+  "$defs": {
+    "ArtifactRef": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "media_type": {
+          "title": "Media Type",
+          "type": "string"
+        },
+        "sha256": {
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "title": "Size Bytes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "key",
+        "media_type",
+        "sha256",
+        "size_bytes"
+      ],
+      "title": "ArtifactRef",
+      "type": "object"
+    },
+    "Claim": {
+      "additionalProperties": false,
+      "properties": {
+        "claim_id": {
+          "title": "Claim Id",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "source_ids": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Source Ids",
+          "type": "array"
+        },
+        "evidence_type": {
+          "enum": [
+            "documented",
+            "general_industry_practice",
+            "inference"
+          ],
+          "title": "Evidence Type",
+          "type": "string"
+        },
+        "caveat": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Caveat"
+        }
+      },
+      "required": [
+        "claim_id",
+        "text",
+        "source_ids",
+        "evidence_type"
+      ],
+      "title": "Claim",
+      "type": "object"
+    },
+    "DialogueScript": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "project_id": {
+          "title": "Project Id",
+          "type": "string"
+        },
+        "script_revision": {
+          "minimum": 1,
+          "title": "Script Revision",
+          "type": "integer"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "language": {
+          "const": "en",
+          "default": "en",
+          "title": "Language",
+          "type": "string"
+        },
+        "turns": {
+          "items": {
+            "$ref": "#/$defs/DialogueTurn"
+          },
+          "maxItems": 12,
+          "minItems": 12,
+          "title": "Turns",
+          "type": "array"
+        }
+      },
+      "required": [
+        "project_id",
+        "script_revision",
+        "title",
+        "turns"
+      ],
+      "title": "DialogueScript",
+      "type": "object"
+    },
+    "DialogueTurn": {
+      "additionalProperties": false,
+      "properties": {
+        "dialogue_id": {
+          "title": "Dialogue Id",
+          "type": "string"
+        },
+        "order": {
+          "maximum": 12,
+          "minimum": 1,
+          "title": "Order",
+          "type": "integer"
+        },
+        "scene_index": {
+          "maximum": 6,
+          "minimum": 1,
+          "title": "Scene Index",
+          "type": "integer"
+        },
+        "speaker_id": {
+          "enum": [
+            "sundar",
+            "jensen"
+          ],
+          "title": "Speaker Id",
+          "type": "string"
+        },
+        "text": {
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "intent": {
+          "enum": [
+            "hook",
+            "question",
+            "answer",
+            "challenge",
+            "takeaway"
+          ],
+          "title": "Intent",
+          "type": "string"
+        },
+        "claim_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Claim Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "dialogue_id",
+        "order",
+        "scene_index",
+        "speaker_id",
+        "text",
+        "intent"
+      ],
+      "title": "DialogueTurn",
+      "type": "object"
+    },
+    "ResearchBundle": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "project_id": {
+          "title": "Project Id",
+          "type": "string"
+        },
+        "topic": {
+          "title": "Topic",
+          "type": "string"
+        },
+        "tavily_request_id": {
+          "title": "Tavily Request Id",
+          "type": "string"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        },
+        "report_markdown": {
+          "title": "Report Markdown",
+          "type": "string"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/Source"
+          },
+          "title": "Sources",
+          "type": "array"
+        },
+        "claims": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Claims",
+          "type": "array"
+        },
+        "uncertainties": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Uncertainties",
+          "type": "array"
+        },
+        "raw_response": {
+          "$ref": "#/$defs/ArtifactRef"
+        },
+        "is_mock": {
+          "default": false,
+          "title": "Is Mock",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "project_id",
+        "topic",
+        "tavily_request_id",
+        "summary",
+        "report_markdown",
+        "sources",
+        "claims",
+        "raw_response"
+      ],
+      "title": "ResearchBundle",
+      "type": "object"
+    },
+    "Source": {
+      "additionalProperties": false,
+      "properties": {
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        },
+        "favicon": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Favicon"
+        }
+      },
+      "required": [
+        "source_id",
+        "title",
+        "url"
+      ],
+      "title": "Source",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "research": {
+      "$ref": "#/$defs/ResearchBundle"
+    },
+    "script": {
+      "$ref": "#/$defs/DialogueScript"
+    }
+  },
+  "required": [
+    "project_id",
+    "research",
+    "script"
+  ],
+  "title": "ImageRequest",
+  "type": "object"
+}
