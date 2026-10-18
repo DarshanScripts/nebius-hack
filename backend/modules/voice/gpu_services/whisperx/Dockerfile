@@ -1,5 +1,5 @@
-# WhisperX forced-alignment service. Build context: this directory.
-#   docker build -t reel-whisperx backend/modules/voice/gpu_services/whisperx
+# WhisperX forced-alignment service. Build context: the REPOSITORY ROOT (as in infra/compose.gpu.yml).
+#   docker build -f backend/modules/voice/gpu_services/whisperx/Dockerfile -t reel-whisperx .
 #   docker run --gpus all -p 127.0.0.1:8003:8003 -e ALIGNMENT_API_KEY=... -v whisperx-models:/models reel-whisperx
 FROM python:3.11-slim-bookworm
 
@@ -17,13 +17,13 @@ RUN apt-get update \
 WORKDIR /srv
 
 # Locked environment: torch 2.8.0 + CUDA 12.8 wheels (Blackwell sm_120 kernels), whisperx 3.8.6.
-COPY requirements.txt .
+COPY backend/modules/voice/gpu_services/whisperx/requirements.txt .
 RUN pip install --extra-index-url https://download.pytorch.org/whl/cu128 -r requirements.txt
 
 # whisperx.align sentence-splits with NLTK punkt_tab; bake it in so startup needs no download.
 RUN python -m nltk.downloader -d /opt/nltk_data punkt_tab
 
-COPY app.py .
+COPY backend/modules/voice/gpu_services/whisperx/app.py .
 
 EXPOSE 8003
 HEALTHCHECK --interval=30s --timeout=10s --start-period=600s --retries=3 \

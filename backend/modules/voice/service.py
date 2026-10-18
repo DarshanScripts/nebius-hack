@@ -21,6 +21,7 @@ from . import audio, clients, mock
 from .config import MAX_SPEEDUP, SAMPLE_RATE, SPEEDUP_STEP, VoiceSettings
 from .errors import fail
 from .text import build_srt, build_words, normalize_transcript, tokenize
+from .validate import validate_bundle
 
 RESYNTH_CODES = {
     "ALIGNMENT_INCOMPLETE",
@@ -257,7 +258,36 @@ async def _write_clip(runtime: Runtime, base: str, clip: Clip, final: Final, qua
     )
 
 
+MAX_ATTEMPT_DIRS = 50
+
+
+def _output_base(provider: Provider, request: VoiceRequest, runtime: Runtime) -> tuple[str, AudioBundle | None]:
+    """Pick where to write. Artifacts are immutable (core refuses changed bytes at an existing key), so a retry
+    reuses a complete, still-valid bundle for this script revision, or writes into a fresh attempt directory."""
+    root = f"projects/{request.project_id}/voice/v{request.script.script_revision}"
+    for n in range(1, MAX_ATTEMPT_DIRS + 1):
+        base = root if n == 1 else f"{root}/attempt-{n}"
+        if not runtime.path(base).exists():
+            return base, None
+        bundle_path = runtime.path(f"{base}/bundle.json")
+        if bundle_path.is_file():
+            try:
+                bundle = AudioBundle.model_validate_json(bundle_path.read_bytes())
+            except ValueError:
+                continue
+            if (
+                bundle.project_id == request.project_id
+                and all(u.timing_quality == provider.timing_quality for u in bundle.utterances)
+                and not validate_bundle(bundle, request.script, runtime, request.max_speech_frames)
+            ):
+                return base, bundle
+    raise fail("VOICE_OUTPUT_EXHAUSTED", f"{MAX_ATTEMPT_DIRS} voice attempt directories already used under {root}")
+
+
 async def _run(provider: Provider, request: VoiceRequest, runtime: Runtime, cfg: VoiceSettings) -> AudioBundle:
+    base, reusable = _output_base(provider, request, runtime)
+    if reusable is not None:
+        return reusable
     turns = sorted(request.script.turns, key=lambda t: t.order)
     retries = 0 if provider.is_mock else cfg.resynth_attempts
     clips: list[tuple[Clip, int]] = []
@@ -272,7 +302,6 @@ async def _run(provider: Provider, request: VoiceRequest, runtime: Runtime, cfg:
     if total > request.max_speech_frames:
         raise _over_budget(total, request.max_speech_frames, speed)
 
-    base = f"projects/{request.project_id}/voice/v{request.script.script_revision}"
     utterances = [await _write_clip(runtime, base, c, f, provider.timing_quality) for c, f in finals]
     bundle = AudioBundle(
         project_id=request.project_id,

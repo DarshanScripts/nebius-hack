@@ -21,6 +21,9 @@ pykakasi==2.3.0
 pyloudnorm
 omegaconf
 huggingface_hub
+# resemble-perth (Chatterbox's watermarker) imports pkg_resources, which setuptools>=81 no longer ships;
+# without it perth.PerthImplicitWatermarker is None and ChatterboxTurboTTS fails to construct.
+setuptools<81
 
 fastapi
 uvicorn[standard]
