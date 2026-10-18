@@ -11,6 +11,10 @@ await mkdir('.artifacts', { recursive: true })
 
 try {
   await page.goto(`${base}/?mock=1`)
+  await page.setViewportSize({ width: 1536, height: 708 })
+  assert.ok(await page.locator('.mock-hint').evaluate(element => element.getBoundingClientRect().bottom <= window.innerHeight))
+  assert.ok(await page.locator('.new-workspace .primary-button').evaluate(element => element.getBoundingClientRect().bottom <= window.innerHeight))
+  await page.setViewportSize({ width: 1440, height: 900 })
   await page.getByRole('button', { name: 'Create reel' }).click()
   await page.getByText('Research & sources').waitFor()
   await page.getByText('The conversation').waitFor()

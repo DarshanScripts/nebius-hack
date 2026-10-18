@@ -38,3 +38,23 @@
 @media(min-width:761px) and (max-width:1200px){.topbar{padding-left:30px;padding-right:30px}.creation-shell{padding:0 28px 28px}.new-workspace{padding-left:55px;padding-right:55px}.new-workspace h2{font-size:44px}.hero-illustration{opacity:.35}}
 @media(max-width:760px){.breadcrumb{font-size:10px;color:#779078}.breadcrumb span{font-size:15px;margin:0 4px}.creation-shell{flex:1;min-height:0;overflow:auto;padding:12px;background:#f8faf6}.new-workspace{width:100%;min-height:100%;margin:0;border:1px solid #e4ebe1;border-radius:18px;background:#fff;padding:32px 22px}.new-workspace h2{font-size:32px}.new-workspace>p{font-size:14px}.new-workspace .hero-icon{margin-bottom:22px}.new-workspace form{margin-top:32px}.topic-label{display:flex;justify-content:space-between}.topic-label span{font-size:11px;color:#8da08b}.hero-illustration,.wide-only{display:none}.new-workspace .mock-hint{border-top:1px solid #e4ebe1;padding-top:14px;display:flex;gap:9px;align-items:center}.mock-hint span{font-size:17px}.sidebar-empty{display:none}}
 @media(min-width:1201px){.topbar{padding-top:17px}.creation-shell{padding-left:53px}.new-workspace{padding-bottom:32px}.new-workspace .mock-hint{max-width:none}}
+@media(min-width:761px) and (max-height:820px){
+  .workspace{min-height:0}
+  .topbar{min-height:96px;padding-top:12px;padding-bottom:10px;align-items:flex-start}
+  .topbar h1{font-size:27px;margin-top:5px}
+  .breadcrumb{font-size:13px}
+  .creation-shell{padding-top:0;padding-bottom:14px}
+  .new-workspace{min-height:calc(100dvh - 110px);padding-top:25px;padding-bottom:20px}
+  .new-workspace>.hero-icon{width:44px;height:44px;font-size:25px;margin-bottom:12px;border-radius:12px}
+  .new-workspace>.eyebrow{font-size:11px}
+  .new-workspace h2{font-size:39px;letter-spacing:-1.7px;margin:12px 0 8px}
+  .new-workspace>p:not(.mock-hint){font-size:16px;line-height:1.4}
+  .new-workspace form{margin-top:20px;gap:7px}
+  .topic-label label,.topic-label span{font-size:11px}
+  .new-workspace textarea{height:76px;min-height:76px;padding:12px 15px;font-size:16px;border-radius:12px}
+  .new-workspace .primary-button{width:230px;height:47px;margin-top:6px;padding:0 20px;font-size:16px;border-radius:10px}
+  .new-workspace .primary-button span:first-child,.new-workspace .primary-button span:last-child{font-size:23px}
+  .new-workspace .mock-hint{margin-top:14px;padding-top:11px;font-size:12px}
+  .hero-illustration{transform:rotate(-17deg) scale(.74);transform-origin:top right;opacity:.45}
+  .sidebar{padding-bottom:18px}.sidebar-label{margin-top:25px;margin-bottom:10px}.sidebar-empty{gap:5px}.empty-folder{width:56px;height:56px;margin:3px 0 4px;border-radius:16px}
+}
