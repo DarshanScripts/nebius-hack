@@ -7,6 +7,8 @@ import type { EditorApi } from './api/client'
 import type { ProjectEvent, ProjectSnapshot, ProjectSummary, RetryStage, SceneState } from './types/contracts'
 
 const isFrontendMock = new URLSearchParams(window.location.search).get('mock') === '1'
+const liveWorkspaceUrl = new URL(window.location.href)
+liveWorkspaceUrl.searchParams.delete('mock')
 const api: EditorApi = isFrontendMock ? mockApi : liveApi
 const selectionKey = `nebius-selected-project-${isFrontendMock ? 'frontend-mock' : 'api'}`
 const names = { sundar: 'Sundar Pichai', jensen: 'Jensen Huang' }
@@ -165,6 +167,10 @@ export function App() {
 
   return <div className={`app-shell view-${view}`}>
     <a className="skip-link" href="#main-content">Skip to content</a>
+    {isFrontendMock && <div className="demo-mode-banner" role="status">
+      <span>Sample workspace — scenes use placeholder videos.</span>
+      <a href={liveWorkspaceUrl.href}>Open live workspace <Icon name="arrow" size={14} /></a>
+    </div>}
     <header className="app-header">
       <button className="brand" onClick={showNew} aria-label="ResearchReel home"><BrandMark /><span>ResearchReel</span></button>
       <nav className="header-actions" aria-label="Main navigation">

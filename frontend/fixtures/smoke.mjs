@@ -18,6 +18,9 @@ const shot = async name => {
 
 try {
   await page.goto(`${base}/?mock=1`)
+  await page.getByText('Sample workspace — scenes use placeholder videos.', { exact: true }).waitFor()
+  const liveLink = await page.getByRole('link', { name: 'Open live workspace' }).getAttribute('href')
+  assert.equal(new URL(liveLink).searchParams.has('mock'), false)
   await page.evaluate(() => document.fonts.ready)
   await page.getByRole('heading', { name: 'Ideas, beautifully told.' }).waitFor()
   assert.ok(await page.getByRole('button', { name: 'Create reel', exact: true }).isDisabled())

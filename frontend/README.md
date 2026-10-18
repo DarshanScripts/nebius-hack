@@ -36,6 +36,40 @@ npm run dev
 
 Open `http://localhost:5173/?mock=1` for the standalone frontend fixture. Omit `?mock=1` to call the backend. For local backend development, set `VITE_API_BASE_URL=http://localhost:8000` in the root `.env`; for the deployed same-origin proxy, build with `VITE_API_BASE_URL=`. Restart/rebuild Vite after changing this build-time value. No API, NVIDIA, Tavily, voice, or Nebius credentials are needed for the frontend fixture.
 
+**A mock preview is not a live-generation demo.** `?mock=1` deliberately uses the
+same short placeholder MP4 for every scene. A persistent banner identifies this
+mode and links to the live workspace without the query flag; mock and API project
+selections use separate storage keys.
+
+Vite now forwards same-origin `/api` requests to `127.0.0.1:8000` in both dev and
+preview. Start FastAPI and the renderer, then run the frontend with an empty
+`VITE_API_BASE_URL` for local proxying:
+
+```bash
+# Terminal 1, repository root (real providers must be configured/reachable):
+uv run uvicorn backend.app:app --host 127.0.0.1 --port 8000 --workers 1
+# Terminal 2, frontend:
+VITE_API_BASE_URL= npm run dev
+# Open http://localhost:5173/ WITHOUT ?mock=1.
+```
+
+The live path additionally requires the authenticated speech services, voice
+reference files, character PNGs, and a configured scene provider. Merely removing
+`?mock=1` cannot supply missing services. FLUX requires `BFL_API_KEY` when selected;
+use `SCENE_VISUAL_PROVIDER=nemotron` for the NVIDIA scene implementation. The
+renderer must use the same artifact root and bearer token as the API.
+
+Live connection check (2026-10-18): the browser reached the real FastAPI health
+endpoint through Vite and received `mode: live`; the renderer required its bearer
+token. An actual configured NVIDIA scene request compiled and rendered a 270-frame,
+1080×1920, 30 fps H.264/AAC preview. That isolated scene check used fixture
+research/audio/characters, so it does **not** verify the full live pipeline.
+The initial large request returned NVIDIA HTTP 500; a 4096-token, non-reasoning
+request completed with one repair. GPU speech and the real character inputs
+remain on the authenticated Devlab, which requires operator access before a
+fully live local demo can be confirmed. `scripts.check_devlab` checks that access
+without exposing its token.
+
 ```bash
 npm run build
 npm run preview

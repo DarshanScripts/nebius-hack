@@ -44,7 +44,8 @@ let releaseRead
 const readGate = new Promise(resolve => { releaseRead = resolve })
 await mkdir('.artifacts', { recursive: true })
 
-await page.route('**/api/**', async route => {
+// Vite dev also serves /src/api/*.ts modules; only intercept backend routes.
+await page.route(/\/api\/(?:projects|health|artifacts)(?:\/|\?|$)/, async route => {
   const request = route.request()
   const url = new URL(request.url())
   const path = url.pathname
@@ -80,6 +81,7 @@ await page.route('**/api/**', async route => {
 
 try {
   await page.goto(origin)
+  assert.equal(await page.locator('.demo-mode-banner').count(), 0)
   await page.getByLabel('Your topic').fill(topic)
   await page.getByRole('button', { name: 'Create reel' }).click()
   await page.getByText('HTTP fixture research arrived after project creation.').waitFor({ timeout: 10000 })
