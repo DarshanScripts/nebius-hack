@@ -75,3 +75,15 @@
   .workspace.sidebar-collapsed .sidebar-foot{display:grid;place-items:center;width:54px;min-height:52px;padding:0;margin-top:auto}
 }
 @media(max-width:760px){.new-button-label{display:none}.brand-copy{display:none}.sidebar-toggle{display:none}}
+@media(min-width:761px){
+  .brand-mark{font-family:Arial,sans-serif;color:#0a201b}
+  .new-button{display:flex;align-items:center;gap:12px}
+  .new-button>span:first-child{font-size:26px;line-height:1;margin:0;font-weight:400}
+  .sidebar .new-button-label{font-size:17px;line-height:1.2;font-weight:700;margin:0;white-space:nowrap}
+  .sidebar-foot{gap:10px;padding:12px 13px}
+  .sidebar-foot .status-dot{width:13px;height:13px}
+  .sidebar-foot-copy{min-width:0;flex:1}
+  .sidebar-foot strong{font-size:13px;white-space:nowrap}
+  .sidebar-foot small{font-size:10.5px;white-space:nowrap}
+  .foot-arrow{font-size:19px}
+}
