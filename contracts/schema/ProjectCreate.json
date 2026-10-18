@@ -1,0 +1,22 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "topic": {
+      "maxLength": 1000,
+      "minLength": 5,
+      "title": "Topic",
+      "type": "string"
+    },
+    "language": {
+      "const": "en",
+      "default": "en",
+      "title": "Language",
+      "type": "string"
+    }
+  },
+  "required": [
+    "topic"
+  ],
+  "title": "ProjectCreate",
+  "type": "object"
+}

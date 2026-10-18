@@ -1,0 +1,34 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "scene_index": {
+      "maximum": 6,
+      "minimum": 1,
+      "title": "Scene Index",
+      "type": "integer"
+    },
+    "dialogue_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Dialogue Ids",
+      "type": "array"
+    },
+    "query": {
+      "title": "Query",
+      "type": "string"
+    },
+    "reason": {
+      "title": "Reason",
+      "type": "string"
+    }
+  },
+  "required": [
+    "scene_index",
+    "dialogue_ids",
+    "query",
+    "reason"
+  ],
+  "title": "ImageQuery",
+  "type": "object"
+}

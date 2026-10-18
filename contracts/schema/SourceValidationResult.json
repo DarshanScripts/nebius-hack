@@ -1,0 +1,21 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "valid": {
+      "title": "Valid",
+      "type": "boolean"
+    },
+    "diagnostics": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Diagnostics",
+      "type": "array"
+    }
+  },
+  "required": [
+    "valid"
+  ],
+  "title": "SourceValidationResult",
+  "type": "object"
+}

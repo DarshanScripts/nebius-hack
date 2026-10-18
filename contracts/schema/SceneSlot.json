@@ -1,0 +1,55 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "scene_id": {
+      "title": "Scene Id",
+      "type": "string"
+    },
+    "index": {
+      "maximum": 6,
+      "minimum": 1,
+      "title": "Index",
+      "type": "integer"
+    },
+    "start_frame": {
+      "minimum": 0,
+      "title": "Start Frame",
+      "type": "integer"
+    },
+    "end_frame": {
+      "exclusiveMinimum": 0,
+      "title": "End Frame",
+      "type": "integer"
+    },
+    "dialogue_ids": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "title": "Dialogue Ids",
+      "type": "array"
+    },
+    "entry_state": {
+      "const": "clear_content",
+      "default": "clear_content",
+      "title": "Entry State",
+      "type": "string"
+    },
+    "exit_state": {
+      "const": "clear_content",
+      "default": "clear_content",
+      "title": "Exit State",
+      "type": "string"
+    }
+  },
+  "required": [
+    "scene_id",
+    "index",
+    "start_frame",
+    "end_frame",
+    "dialogue_ids"
+  ],
+  "title": "SceneSlot",
+  "type": "object"
+}
