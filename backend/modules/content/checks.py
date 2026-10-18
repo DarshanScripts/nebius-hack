@@ -7,7 +7,7 @@ from contracts.models import Claim, DialogueScript, ImageBundle, ResearchBundle
 
 SPEAKERS = ("sundar", "jensen")
 MIN_WORDS, MAX_WORDS = 110, 145  # target 120-135; small tolerance before forcing a repair
-STAGE_DIRECTION = re.compile(r"\[[^\]]*\]|\([^)]*\)|\*[^*]+\*|^\s*\w+\s*:")
+STAGE_DIRECTION = re.compile(r"\[[^\]]*\]|\([^)]*\)|\*[^*]+\*|^\s*(sundar|jensen|pichai|huang)\b[^:]{0,20}:", re.I)
 FACTUAL_INTENTS = {"answer"}
 
 

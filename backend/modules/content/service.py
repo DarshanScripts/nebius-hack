@@ -180,7 +180,8 @@ async def _tavily_raw(request: ResearchRequest, runtime: Runtime, d: str) -> dic
                 deadline_s=float(_setting(runtime, "TAVILY_RESEARCH_TIMEOUT_SECONDS", 600)),
             )
         except StageFailure as exc:
-            if exc.error.code == "TAVILY_RESEARCH_FAILED":
+            # Permanent failure of this request: the next retry starts a new attempt. A bad key is not the request's fault.
+            if not exc.error.retryable and exc.error.code != "TAVILY_AUTH":
                 await runtime.write_json(f"{d}/failed.json", {"request_id": initial["request_id"],
                                                               "error": exc.error.model_dump(mode="json")})
             raise
@@ -199,11 +200,15 @@ async def run_research(request: ResearchRequest, runtime: Runtime) -> ResearchBu
         raw = await _tavily_raw(request, runtime, d)
 
     sources = _index_sources(raw.get("sources"))
-    if not sources:
-        raise _fail("research", "RESEARCH_NO_SOURCES", "Tavily research returned no usable source URLs")
     report = _to_markdown(raw.get("content")).strip()
-    if not report:
-        raise _fail("research", "RESEARCH_EMPTY", "Tavily research returned an empty report")
+    if not sources or not report:
+        error = _fail("research", "RESEARCH_NO_SOURCES" if not sources else "RESEARCH_EMPTY",
+                      "Tavily research returned no usable source URLs" if not sources else
+                      "Tavily research returned an empty report", True)
+        if not runtime.mock_mode:  # reusing this raw.json would fail forever; retry with a new request
+            await runtime.write_json(f"{d}/failed.json", {"request_id": raw.get("request_id"),
+                                                          "error": error.error.model_dump(mode="json")})
+        raise error
 
     if runtime.mock_mode:
         notes = ResearchNotes.model_validate(_fixture("research_notes.json"))
@@ -212,7 +217,8 @@ async def run_research(request: ResearchRequest, runtime: Runtime) -> ResearchBu
 
     raw_ref = _ref_for(runtime, f"{d}/raw.json")
     bundle = ResearchBundle(
-        project_id=request.project_id, topic=request.topic, tavily_request_id=str(raw.get("request_id", "")),
+        project_id=request.project_id, topic=request.topic, tavily_request_id=str(
+            raw.get("request_id") or (_read_json(runtime, f"{d}/initial.json") or {}).get("request_id", "")),
         summary=notes.summary, report_markdown=report, sources=sources, claims=notes.claims,
         uncertainties=notes.uncertainties, raw_response=raw_ref, is_mock=runtime.mock_mode,
     )
@@ -236,7 +242,7 @@ class _TurnDraft(BaseModel):
     model_config = ConfigDict(extra="forbid")
     speaker_id: SpeakerId
     intent: Literal["hook", "question", "answer", "challenge", "takeaway"]
-    text: str = Field(min_length=1)
+    text: str = Field(min_length=1, pattern=r"\S")
     claim_ids: list[str] = Field(default_factory=list)
 
 

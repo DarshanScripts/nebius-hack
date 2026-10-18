@@ -220,3 +220,54 @@ def test_live_find_images_downloads_and_handles_failures(tmp_path, monkeypatch):
     assert b.selections[0].query.dialogue_ids == ["d001", "d002"] and b.selections[0].source_page_url is None
     assert "search failed" in b.selections[2].reason and "no usable image" in b.selections[3].reason
     assert rt.path(b.selections[0].asset.key).read_bytes() == png()
+
+
+@pytest.mark.parametrize("handler", [
+    lambda req: httpx.Response(201, json={"request_id": "rq1"}) if req.method == "POST"
+    else httpx.Response(200, json={"status": "completed", "content": "report", "sources": []}),
+    lambda req: httpx.Response(201, json={"request_id": "rq1"}) if req.method == "POST"
+    else httpx.Response(200, json={"request_id": "rq1", "status": "cancelled"}),
+])
+def test_permanent_research_failure_lets_retry_start_fresh(tmp_path, monkeypatch, handler):
+    mock_tavily(monkeypatch, handler)
+    rt = runtime(tmp_path, mock=False)
+    with pytest.raises(StageFailure):
+        asyncio.run(service.run_research(ResearchRequest(project_id=PID, topic=TOPIC), rt))
+    assert service._attempt_dir(rt, f"projects/{PID}/research") == f"projects/{PID}/research/attempt2"
+
+
+def test_auth_error_while_polling_keeps_request_for_resume(tmp_path, monkeypatch):
+    mock_tavily(monkeypatch, lambda req: httpx.Response(201, json={"request_id": "rq1"}) if req.method == "POST"
+                else httpx.Response(401, json={}))
+    rt = runtime(tmp_path, mock=False)
+    with pytest.raises(StageFailure):
+        asyncio.run(service.run_research(ResearchRequest(project_id=PID, topic=TOPIC), rt))
+    assert service._attempt_dir(rt, f"projects/{PID}/research") == f"projects/{PID}/research"
+
+
+def test_request_id_falls_back_to_saved_initial(tmp_path, monkeypatch):
+    mock_tavily(monkeypatch, lambda req: httpx.Response(201, json={"request_id": "rq1"}) if req.method == "POST"
+                else httpx.Response(200, json={"status": "completed", "content": "r", "sources": [{"url": "https://a.example"}]}))
+    rt = runtime(tmp_path, mock=False, replies=[{"summary": "s", "claims": GOOD_CLAIMS}])
+    assert asyncio.run(service.run_research(ResearchRequest(project_id=PID, topic=TOPIC), rt)).tavily_request_id == "rq1"
+
+
+def test_blank_turn_is_schema_error_and_label_check_is_narrow():
+    with pytest.raises(ValueError):
+        service._TurnDraft(speaker_id="sundar", intent="hook", text="   ")
+    assert checks.STAGE_DIRECTION.search("Sundar: hello") and checks.STAGE_DIRECTION.search("[laughs] ok")
+    assert not checks.STAGE_DIRECTION.search("First: signaling sets up the call.")
+
+
+def test_redirect_to_private_address_is_refused(monkeypatch):
+    async def public(url):
+        return url.startswith("https://img.example")
+    monkeypatch.setattr(images, "_public_host", public)
+
+    async def go():
+        transport = httpx.MockTransport(lambda req: httpx.Response(302, headers={"Location": "http://169.254.169.254/x"})
+                                        if req.url.host == "img.example" else httpx.Response(200, content=png()))
+        async with httpx.AsyncClient(transport=transport) as c:
+            return await images.download(c, "https://img.example/a.png")
+    img, why = asyncio.run(go())
+    assert img is None and "refused" in why and "169.254" in why

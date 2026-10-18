@@ -23,7 +23,7 @@ LLM calls go through `runtime.structured(...)` (configured Nemotron endpoint); n
 - Claims citing unknown sources or `inference` without a caveat are sent back for repair, and dropped if still invalid; fewer than 3 valid claims → `RESEARCH_UNGROUNDED`. Claim IDs are renumbered `c001…`.
 - Research prompt asks for official engineering/security docs and standards, separates documented / industry practice / inference, and forbids stating undocumented codec/topology/region/vendor as fact.
 - Tavily: network/429/5xx retried 4× with backoff, `Retry-After` honoured (capped 60 s); 401/403 → `TAVILY_AUTH`, other 4xx → `TAVILY_BAD_REQUEST`, both immediate.
-- **Resume:** a retry with `initial.json` but no `raw.json` resumes polling that `request_id` (no new paid request). Poll deadline → retryable `TAVILY_RESEARCH_TIMEOUT`. Completed `raw.json` is reused. A Tavily-reported failure writes `failed.json`, so the next attempt uses `research/attempt2/`.
+- **Resume:** a retry with `initial.json` but no `raw.json` resumes polling that `request_id` (no new paid request). Poll deadline → retryable `TAVILY_RESEARCH_TIMEOUT`. Completed `raw.json` is reused. A permanent failure (Tavily `failed`, unknown status, no sources or empty report; not a 401) writes `failed.json`, so the next retry uses `research/attempt2/`.
 - Images: http(s) only; every hop (redirects followed manually, max 3) must resolve to public IPs only; 8 MB cap, 20 s total per download; must decode with Pillow as PNG/JPEG/WebP ≥200 px (SVG/GIF rejected). `source_page_url` is only set if Tavily returned one — never invented. Failed scenes are `status:"unavailable"` with a reason; one scene's failure never affects the others.
 
 ### Mock mode (`runtime.mock_mode`)
@@ -36,7 +36,7 @@ uv venv .venv --python 3.11 && uv pip install --python .venv/bin/python pydantic
 export PYTHONPATH="$PWD/.bootstrap:$PWD"     # drop .bootstrap once contracts/models.py is on main
 
 python -m backend.modules.content.demo --mock --output output/demos/content     # fixtures only
-python -m pytest backend/modules/content/tests -q                                # 11 tests
+python -m pytest backend/modules/content/tests -q                                # 17 tests
 python -m backend.modules.content.demo --output output/demos/content --topic "How does WhatsApp voice calling infrastructure work?"   # live
 ```
 
@@ -44,7 +44,7 @@ The live demo reads root `.env` (`TAVILY_*`, `NEMOTRON_BASE_URL`, `NEMOTRON_API_
 
 ## Results (2026-10-18)
 - Mock demo: 2 sources, 6 claims, 12 alternating turns / 133 words in six scenes, 5 selected images + 1 unavailable; artifacts written under `output/demos/content/projects/demo-whatsapp-001/`.
-- `pytest`: 11 passed — mock pipeline; live research polling (`in_progress`→`processing`→`completed`), structured-content conversion, source dedupe, claim repair; resume without new POST; retryable timeout; failed-attempt directory; unknown status / 401; 429 + `Retry-After`; dialogue repair + revision + failure; SSRF refusals (loopback, RFC1918, metadata IP, file://) and decode checks; live image selection with a search error and an undecodable candidate.
+- `pytest`: 17 passed — redirect-to-metadata-IP refusal; permanent failures (no sources, unknown status) start a new attempt while a 401 keeps the request for resume; mock pipeline; live research polling (`in_progress`→`processing`→`completed`), structured-content conversion, source dedupe, claim repair; resume without new POST; retryable timeout; failed-attempt directory; unknown status / 401; 429 + `Retry-After`; dialogue repair + revision + failure; SSRF refusals (loopback, RFC1918, metadata IP, file://) and decode checks; live image selection with a search error and an undecodable candidate.
 
 ## Notes for member 1 (integration)
 - Settings are read from `runtime.settings` by env name (`TAVILY_API_KEY`, `TAVILY_RESEARCH_MODEL`, `TAVILY_POLL_INTERVAL_SECONDS`, `TAVILY_RESEARCH_TIMEOUT_SECONDS`); lowercase keys also work.
