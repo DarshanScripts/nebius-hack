@@ -31,7 +31,7 @@ from contracts.models import EditRoutingRequest, FinalRenderRequest, PreviewRequ
 
 from . import service
 from .fixtures.context import build_fixture_context
-from .fixtures.runtime import FixtureRuntime, live_llm_from_env
+from .fixtures.runtime import FixtureRuntime
 
 REPO = Path(__file__).resolve().parents[3]
 RENDERER = REPO / "renderer"
@@ -91,10 +91,22 @@ async def run(args: argparse.Namespace, report: dict[str, Any]) -> None:
     else:
         token = os.environ.get("RENDER_WORKER_TOKEN", "")
         report["worker"] = {"url": url, "started_by_demo": False}
-    settings = {"RENDER_WORKER_URL": url, "RENDER_WORKER_TOKEN": token, "RENDER_JOB_TIMEOUT_SECONDS": args.timeout, "NEMOTRON_STRUCTURED_MODE": os.environ.get("NEMOTRON_STRUCTURED_MODE", "json_prompt")}
+    settings = {"RENDER_WORKER_URL": url, "RENDER_WORKER_TOKEN": token, "RENDER_JOB_TIMEOUT_SECONDS": args.timeout, "NEMOTRON_STRUCTURED_MODE": "json_prompt"}
     try:
         await wait_health(url)
-        rt = FixtureRuntime(out, mock_mode=args.mock, settings=settings, llm=None if args.mock else live_llm_from_env())
+        if args.mock:
+            rt = FixtureRuntime(out, mock_mode=True, settings=settings)
+        else:
+            # Live: core's real Runtime with the root .env (NEMOTRON_* etc.), artifacts/worker overridden for this demo.
+            from backend.core.config import Settings
+            from backend.core.runtime import AppRuntime
+            progress_log: list[dict[str, Any]] = []
+
+            async def on_progress(**kw: Any) -> None:
+                progress_log.append(kw)
+            rt = AppRuntime(Settings(mock_mode=False, artifact_root=out, render_worker_url=url, render_worker_token=token,
+                                     render_job_timeout_seconds=args.timeout), on_progress)
+            rt.progress_events = progress_log
         ctx = await build_fixture_context(rt, character_pngs=args.character_pngs)
         report["context"] = {"context_hash": ctx.context_hash, "timeline_hash": ctx.timeline_hash, "boundaries": [s.start_frame for s in ctx.timeline.scenes] + [1800]}
         log(f"fixture context ready: boundaries {report['context']['boundaries']}")

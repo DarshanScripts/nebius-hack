@@ -1,7 +1,0 @@
-node_modules
-.jobs
-dist
-test
-*.log
-.env
-.env.*

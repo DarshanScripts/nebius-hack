@@ -1,8 +1,9 @@
 """Small standalone Runtime for the scenes demo/tests (plan.md section 2/12).
 
-Core's real Runtime (member 1) replaces this in the integrated API. It
-implements the same protocol: checked artifact paths, atomic immutable
-writes, structured output with bounded repair, and a progress callback.
+Core's real Runtime (backend/core/runtime.py AppRuntime) replaces this in the API. It
+implements the same protocol with core's own path check and canonical JSON: checked
+artifact paths, atomic immutable writes, structured output with bounded repair, and a
+progress callback.
 """
 from __future__ import annotations
 
@@ -16,6 +17,7 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 
 from contracts.models import ArtifactRef, PipelineError, StageFailure
+from contracts.validation import artifact_path, canonical_json
 
 
 class FixtureRuntime:
@@ -37,12 +39,7 @@ class FixtureRuntime:
         self.progress_events: list[dict[str, Any]] = []
 
     def path(self, key: str) -> Path:
-        if not key or key.startswith("/") or "\\" in key or "\0" in key or any(p in ("", "..") for p in key.split("/")):
-            raise ValueError(f"invalid artifact key: {key!r}")
-        full = (self.artifact_root / key).resolve()
-        if self.artifact_root not in full.parents:
-            raise ValueError(f"artifact key escapes root: {key!r}")
-        return full
+        return artifact_path(self.artifact_root, key)
 
     async def write_bytes(self, key: str, data: bytes, media_type: str) -> ArtifactRef:
         full = self.path(key)
@@ -58,10 +55,7 @@ class FixtureRuntime:
         return ArtifactRef(key=key, media_type=media_type, sha256=sha, size_bytes=len(data))
 
     async def write_json(self, key: str, value: Any) -> ArtifactRef:
-        if isinstance(value, BaseModel):
-            value = value.model_dump(mode="json")
-        data = json.dumps(value, indent=2, ensure_ascii=False).encode()
-        return await self.write_bytes(key, data, "application/json")
+        return await self.write_bytes(key, canonical_json(value), "application/json")
 
     async def structured(self, *, messages: list[dict[str, str]], schema: type[BaseModel]) -> Any:
         if self._structured_handler is not None:
@@ -100,19 +94,3 @@ def _strip_fence(text: str) -> str:
         t = t.split("\n", 1)[1] if "\n" in t else t
         t = t.rsplit("```", 1)[0]
     return t.strip()
-
-
-def live_llm_from_env() -> Any:
-    """ChatOpenAI against the configured NEMOTRON_* endpoint (never a hardcoded provider)."""
-    from langchain_openai import ChatOpenAI
-
-    missing = [k for k in ("NEMOTRON_BASE_URL", "NEMOTRON_API_KEY", "NEMOTRON_MODEL") if not os.environ.get(k)]
-    if missing:
-        raise SystemExit(f"live mode needs {', '.join(missing)} in the environment")
-    return ChatOpenAI(
-        base_url=os.environ["NEMOTRON_BASE_URL"],
-        api_key=os.environ["NEMOTRON_API_KEY"],
-        model=os.environ["NEMOTRON_MODEL"],
-        timeout=float(os.environ.get("NEMOTRON_TIMEOUT_SECONDS", "180")),
-        temperature=0.2,
-    )

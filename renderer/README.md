@@ -8,7 +8,9 @@ and blockers — is in [`backend/modules/scenes/README.md`](../backend/modules/s
 npm ci
 npm run typecheck && npm test
 ARTIFACT_ROOT=./output RENDER_WORKER_TOKEN=<secret> npm run worker   # :8001
-docker build -t reel-renderer .
+# Docker build context is the REPOSITORY ROOT (as infra/compose.yml):
+#   docker build -f renderer/Dockerfile -t reel-renderer .     (run from the repo root)
+# Runs as uid 10001 like the api image (shared output volume); any uid works via --user.
 ```
 
 Files: `src/scene-kit.tsx` (the only module generated scenes may import), `src/shell.tsx`

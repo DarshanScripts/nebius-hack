@@ -233,12 +233,36 @@ def test_exhausted_repairs_fall_back_with_visible_metadata(tmp_path, fake_worker
     build = run(service.generate_scene(make_task(ctx), rt))
     assert build.generation_mode == "fallback" and build.repair_attempts == 2
     assert build.warnings and build.warnings[0].startswith("FALLBACK:")
-    assert calls["n"] == 3  # initial + two corrective attempts, no more
+    assert calls["n"] == 2  # a0 draft + a1 repair; the last corrective slot a2 is the fallback
     assert "setTimeout" in calls["messages"][1][-1]["content"]  # feedback reached the repair prompt
     base = tmp_path / "projects" / ctx.project_id / "scenes" / "s02" / "v1" / "op1"
-    assert {p.name for p in base.iterdir() if p.is_dir()} == {"a0", "a1", "a2", "afb"}
+    assert {p.name for p in base.iterdir() if p.is_dir()} == {"a0", "a1", "a2"}
     assert (base / "task.json").exists()
-    assert (base / "a0" / "validation.json").exists() and (base / "afb" / "build.json").exists()
+    assert (base / "a0" / "validation.json").exists() and (base / "a2" / "build.json").exists()
+    assert build.source.key.endswith("/op1/a2/Scene.tsx")
+    assert service.worker_job_id("op1", build) == "op1-a2"
+
+
+def test_zero_repairs_configured_raises_instead_of_falling_back(tmp_path, fake_worker):
+    handler, calls = scripted(BAD)
+    rt = FixtureRuntime(tmp_path, mock_mode=False, settings={"SCENE_REPAIR_ATTEMPTS": 0}, structured_handler=handler)
+    ctx = run(build_fixture_context(rt))
+    with pytest.raises(StageFailure) as e:
+        run(service.generate_scene(make_task(ctx), rt))
+    assert e.value.error.code == "SCENE_REPAIRS_EXHAUSTED" and calls["n"] == 1
+
+
+def test_mock_preview_failure_falls_back_in_next_slot_and_failed_fallback_raises(tmp_path, fake_worker):
+    rt = FixtureRuntime(tmp_path, mock_mode=True)
+    ctx = run(build_fixture_context(rt))
+    task = make_task(ctx, idx=2)
+    build = run(service.generate_scene(task, rt))
+    fake_worker.render_outcomes = ["RENDER_FAILED", "ok"]
+    out = run(service.render_preview(PreviewRequest(project_id=ctx.project_id, job_id="op1", context=ctx, slot=task.slot, build=build), rt))
+    assert fake_worker.jobs == ["op1-a0", "op1-a1"] and out.build.generation_mode == "fallback" and out.render.job_id == "op1-a1"
+    fake_worker.render_outcomes = ["RENDER_FAILED"]
+    with pytest.raises(StageFailure):
+        run(service.render_preview(PreviewRequest(project_id=ctx.project_id, job_id="op1", context=ctx, slot=task.slot, build=out.build), rt))
 
 
 def test_repair_succeeds_on_second_attempt(tmp_path, fake_worker):
