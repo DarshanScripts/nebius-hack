@@ -7,7 +7,8 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "smoke": "node fixtures/smoke.mjs"
+    "smoke": "node fixtures/smoke.mjs",
+    "smoke:api": "node fixtures/api-smoke.mjs"
   },
   "dependencies": {
     "react": "^19.2.0",
