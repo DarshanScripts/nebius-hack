@@ -25,12 +25,39 @@ _SCENE_REF = re.compile(
     re.IGNORECASE,
 )
 _MULTI = re.compile(rf"\bscenes\s+{_NUM}\s*(?:,|and|&|to|-)\s*{_NUM}\b", re.IGNORECASE)
-_GLOBAL = re.compile(
-    r"\b(all|every|each)\s+scenes?\b|\b(whole|entire)\s+(video|reel)\b|\bvoices?\b|\baudio\b|\bdialogue\b|\bscript\b"
-    r"|\bnarrat\w*|\bmusic\b|\bduration\b|\blonger\b|\bshorter\b|\btiming\b|\bspeed\b|\bcaptions?\b|\bsubtitles?\b"
-    r"|\bcharacters?\b|\btheme\b|\bnew reel\b",
-    re.IGNORECASE,
-)
+# Requests that change a LOCKED layer. Diagram vocabulary ("voice packets", "a longer arrow",
+# "animation timing") is a legitimate visual edit, so words are matched in context, not alone.
+_VISUAL_NOUN = r"(?:packets?|paths?|streams?|flows?|icons?|data|routes?|traffic|codecs?|calls?|frames?|waves?|bars?|signals?|bubbles?|channels?|labels?|lines?|arrows?|diagrams?)"
+_SPEAKER = r"(?:sundar|jensen|characters?|avatars?|speakers?|presenters?|hosts?)"
+_SCENE_LEN = rf"(?:scene|video|reel|clip)(?:\s+{_NUM})?"
+_LOCKED: list[tuple[re.Pattern[str], str]] = [(re.compile(p, re.IGNORECASE), why) for p, why in [
+    (r"\b(?:all|every|each|both|other)\s+scenes?\b|\b(?:whole|entire)\s+(?:video|reel)\b|\bnew\s+reel\b",
+     "it affects more than one scene"),
+    (r"\b(?:louder|quieter|volume|mute|music|soundtrack|narrat\w*|voice[- ]?over|re-?record\w*|pronounc\w*|accent|out\s+of\s+sync)\b",
+     "it changes the audio"),
+    (rf"\b(?:voices?|audio|speech|sound)\b(?!\s*-?\s*{_VISUAL_NOUN}\b)",
+     "it changes the audio"),
+    (r"\b(?:dialogue|script|captions?|subtitles?|transcript|wording)\b"
+     r"|\bwhat\s+(?:sundar|jensen|he|she|they)\s+(?:says?|said)\b|\b(?:sundar|jensen)\s+(?:says?|said|should\s+say)\b",
+     "it changes the spoken words or captions"),
+    (rf"\b{_SCENE_LEN}\s+(?:(?:should|must|needs?\s+to|has\s+to)\s+be\s+|is\s+|feels\s+)?(?:a\s+bit\s+|much\s+|way\s+)?(?:longer|shorter|too\s+long|too\s+short)\b|\b(?:longer|shorter)\s+(?:scene|video|reel|clip)\b"
+     rf"|\b(?:extend|lengthen|shorten|trim)\s+(?:the\s+)?(?:scene|video|reel|clip|duration)\b"
+     rf"|\b(?:duration|length)\s+of\s+(?:the\s+)?{_SCENE_LEN}\b|\blast\s+\d+\s*(?:s|secs?|seconds)\b"
+     rf"|\b(?:speed\s+up|slow\s+down)\s+(?:the\s+)?(?:{_SCENE_LEN}|speech|audio|voices?)\b",
+     "scene lengths and timing are locked to the measured audio"),
+    (rf"\b(?:move|resize|enlarge|shrink|hide|remove|swap|replace|flip|reposition)\b[^.;]{{0,40}}\b{_SPEAKER}\b(?!\s*'s\s+{_VISUAL_NOUN})"
+     rf"|\b{_SPEAKER}\b[^.;]{{0,30}}\b(?:bigger|smaller|larger|to\s+the\s+(?:left|right)|position|hidden|disappear|slide)\b",
+     "the character layer is shared by the whole reel"),
+    (r"\b(?:theme|dot\s+grid|typeface|font\s+family)\b|\bbackground\s+(?:colou?r|pattern)\s+of\s+the\s+(?:video|reel)\b|\b(?:topic|video|reel)\s+title\b",
+     "the theme and title are shared by the whole reel"),
+]]
+
+
+def locked_reason(message: str) -> str | None:
+    for pattern, why in _LOCKED:
+        if m := pattern.search(message):
+            return f"'{m.group(0).strip()}': {why}"
+    return None
 
 
 def mentioned_scenes(message: str) -> list[str]:
@@ -61,8 +88,8 @@ def route_deterministic(request: EditRoutingRequest) -> EditIntent:
     if _MULTI.search(msg):
         return _unsupported(msg, "This edit names several scenes. Select one scene to change, or create a new reel.")
     mentioned = mentioned_scenes(msg)
-    if g := _GLOBAL.search(msg):
-        return _unsupported(msg, f"'{g.group(0)}' affects audio, timing or the shared reel layout, which are locked. Scene edits can only change one scene's visuals; create a new reel for this.")
+    if why := locked_reason(msg):
+        return _unsupported(msg, f"Not a single-scene visual edit ({why}). Audio, dialogue, timing, characters and theme are locked; create a new reel for this.")
     if len(mentioned) > 1:
         return _unsupported(msg, f"This message mentions {', '.join(mentioned)}. Select exactly one scene to change.")
     selected = request.selected_scene_id
