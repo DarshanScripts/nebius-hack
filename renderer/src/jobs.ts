@@ -195,7 +195,7 @@ export const prepareJob = async (req: RenderJobRequest): Promise<PreparedJob> =>
 };
 
 // ---------------------------------------------------------------- execution
-const CHILD_ENV_ALLOW = ['PATH', 'HOME', 'TMPDIR', 'LANG', 'LC_ALL', 'XDG_CACHE_HOME', 'FONTCONFIG_PATH', 'FONTCONFIG_FILE', 'NODE_OPTIONS'];
+const CHILD_ENV_ALLOW = ['PATH', 'HOME', 'TMPDIR', 'LANG', 'LC_ALL', 'LD_LIBRARY_PATH', 'XDG_CACHE_HOME', 'FONTCONFIG_PATH', 'FONTCONFIG_FILE', 'NODE_OPTIONS'];
 export const childEnv = (): NodeJS.ProcessEnv =>
   Object.fromEntries(CHILD_ENV_ALLOW.filter((k) => process.env[k] !== undefined).map((k) => [k, process.env[k]]));
 

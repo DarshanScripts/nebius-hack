@@ -94,6 +94,70 @@ client smoke fixture. These changes are merged locally; they have not yet
 been installed on the Devlab at the time of this handoff update. Preserve the
 remote `SCENE_AGENT_MODE=single_call` setting when deploying the scene module.
 
+### Scene retry investigation (2026-10-18)
+
+The remote scene-generation attempt has not completed successfully. Scene 1's
+Nemotron source generation produced valid `Scene.tsx`, `build.json`, and
+`validation.json`, but the preview worker stalled because the Jupyter Devlab
+image lacks Chromium NSS libraries. Scenes 2–6 were interrupted after the
+worker issue. API health was `ok`; renderer health showed one running job.
+
+Chromium is present at
+`/home/jovyan/work/nebius-app/renderer/node_modules/.remotion/chrome-headless-shell/linux64/chrome-headless-shell-linux64/chrome-headless-shell`.
+The missing libraries were installed persistently in user space with mamba at
+`/home/jovyan/work/remotion-libs`; Chromium `--version` succeeds with
+`LD_LIBRARY_PATH=/home/jovyan/work/remotion-libs/lib`. No sudo/root changes
+were made.
+
+An integration archive from commit `11cc617` was uploaded and extracted to
+`/home/jovyan/work/nebius-app-release-11cc617` on the Devlab. It contains
+source only and does not replace the live app yet. A local uncommitted patch
+in `backend/core/pipeline.py` reuses validated `build.json` from an interrupted
+first preview so scene 1 can retry without another Nemotron call. The patch
+also matches M4's `operation_id-a{repair_attempts}` render job ID. Its upload
+is at `/home/jovyan/pipeline-resume-11cc617.py`. `git status` showed this file
+modified and not yet committed; inspect the diff before changing it.
+
+To resume safely, first reinitialize CUA with `await cua.rewriteDocumentation()`
+and attach Brave browser ID `1` to the existing Jupyter tab `24799453`. Check
+the current service process IDs and project snapshot before stopping anything.
+If the remote still runs the old integration, stop only the exact API and
+Remotion worker processes from `/home/jovyan/work/nebius-app`, overlay
+`/home/jovyan/work/nebius-app-release-11cc617` onto that workspace, and copy
+the uploaded pipeline patch to `backend/core/pipeline.py`. Do not overwrite
+`.env`, output, `node_modules`, or speech assets. Run `py_compile` on the
+changed backend modules. Restart the worker with both:
+
+```bash
+export LD_LIBRARY_PATH=/home/jovyan/work/remotion-libs/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+export REMOTION_BROWSER_EXECUTABLE=/home/jovyan/work/nebius-app/renderer/node_modules/.remotion/chrome-headless-shell/linux64/chrome-headless-shell-linux64/chrome-headless-shell
+```
+
+Preserve the private `.env` and its `SCENE_AGENT_MODE=single_call`,
+`SCENE_AGENT_CONCURRENCY=1`, and `NEMOTRON_TIMEOUT_SECONDS=360` settings. Then
+restart worker on `127.0.0.1:8001` and API on `127.0.0.1:8000`. The API recovery
+will make interrupted scenes retryable. Retry scene 1 and verify worker/API
+state before starting the other scenes. Only after this works, retry scenes
+2–6. Do not Stitch the existing example project: its locked context predates
+the supplied character PNGs. A fresh project is required for a final reel.
+
+Local follow-up (later session, no remote access): the uncommitted
+`pipeline.py` patch is now covered by tests. `test_preview_job_matches_final_build`
+was updated to M4's current scheme (fallback uses `-a{repair_attempts}`, `-afb`
+is rejected), and a new
+`test_scene_retry_reuses_validated_build_from_interrupted_preview` proves a
+scene retry after a failed first preview reuses `build.json` with no second
+`generate_scene` call. Full backend suite: **159 passed**. The local file is
+the version to deploy; diff it against `/home/jovyan/pipeline-resume-11cc617.py`
+before copying. Still uncommitted. That session had no CUA tool, so none of
+the remote steps below were run.
+
+Latest observed state: Chromium starts after adding NSS libraries; the app
+source archive and patch are staged remotely; the live app has not yet been
+overlaid/restarted with that integration, no scene preview has been verified,
+and no cloud final reel exists. The current Jupyter tab and tunnel hostname
+may have changed after a Devlab restart; check them in Brave before operating.
+
 No cloud final reel was produced yet. The Devlab container has no verified
 Docker/Compose; all five processes were started directly and need relaunch
 after Devlab restart. `infra/README.md` has exact commands and URL. The

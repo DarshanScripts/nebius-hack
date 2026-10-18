@@ -157,9 +157,9 @@ def test_targeted_edit_stale_progress_and_final(tmp_path):
 @pytest.mark.parametrize("mode,attempts,suffix,accepted", [
     ("agent", 1, "a1", True),
     ("agent", 2, "a2", True),
-    ("fallback", 2, "afb", True),
+    ("fallback", 2, "a2", True),
     ("agent", 1, "a0", False),
-    ("fallback", 2, "a2", False),
+    ("fallback", 2, "afb", False),
 ])
 def test_preview_job_matches_final_build(tmp_path, mode, attempts, suffix, accepted):
     class RepairedScenes(SceneDoubles):
@@ -177,6 +177,48 @@ def test_preview_job_matches_final_build(tmp_path, mode, attempts, suffix, accep
             assert (snapshot.status == "ready") == accepted
             if not accepted:
                 assert all(s.error.code == "CONTRACT_VALIDATION_FAILED" for s in snapshot.scenes)
+        finally:
+            await coordinator.close()
+    asyncio.run(check())
+
+
+def test_scene_retry_reuses_validated_build_from_interrupted_preview(tmp_path):
+    class PreviewFailOnce(SceneDoubles):
+        def __init__(self):
+            super().__init__()
+            self.preview_attempts = 0
+
+        async def generate(self, request, runtime):
+            build = await super().generate(request, runtime)
+            await runtime.write_json(
+                f"projects/{request.project_id}/scenes/{request.slot.scene_id}/v{request.revision}/{request.job_id}/a0/build.json",
+                build,
+            )
+            return build
+
+        async def preview(self, request, runtime):
+            if request.slot.scene_id == "s01":
+                self.preview_attempts += 1
+                if self.preview_attempts == 1:
+                    raise StageFailure(PipelineError(
+                        code="RENDER_WORKER_UNAVAILABLE", stage="scene_preview",
+                        message="Worker stalled on first preview", retryable=True, scene_id="s01"))
+            return await super().preview(request, runtime)
+
+    async def check():
+        doubles = PreviewFailOnce()
+        coordinator, project_id, _ = await ready(tmp_path, doubles)
+        try:
+            snapshot = coordinator.repo.get(project_id)
+            assert snapshot.status == "failed"
+            s01_calls_before = [c for c in doubles.calls if c[0] == "s01"]
+            assert len(s01_calls_before) == 1
+            await coordinator.retry(project_id, "scenes", "s01")
+            await drain(coordinator)
+            after = coordinator.repo.get(project_id)
+            assert after.status == "ready"
+            s01_calls_after = [c for c in doubles.calls if c[0] == "s01"]
+            assert len(s01_calls_after) == 1
         finally:
             await coordinator.close()
     asyncio.run(check())

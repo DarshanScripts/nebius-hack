@@ -7,7 +7,7 @@ from uuid import uuid4
 from contracts.models import (
     CharacterSpec, DialogueRequest, EditRequest, EditRoutingRequest, FinalRenderRequest,
     ImageRequest, PipelineError, PreviewRequest, ProjectCreate, ProjectSnapshot,
-    RenderResult, ResearchRequest, SceneContext, SceneState, SceneTask,
+    RenderResult, ResearchRequest, SceneBuild, SceneContext, SceneState, SceneTask,
     StageFailure, VoiceRequest,
 )
 from contracts.validation import (
@@ -295,6 +295,21 @@ class Coordinator:
         await self.repo.update(project_id, mutate, "scene.started", instruction or "Generating scene",
                                scene_id=scene_id, revision=revision)
 
+    def reusable_scene_build(self, project_id, scene_id, revision, context, slot):
+        """Reuse validated source from an interrupted first preview render."""
+        base = self.runtime.path(f"projects/{project_id}/scenes/{scene_id}/v{revision}")
+        if not base.is_dir():
+            return None
+        for path in sorted(base.glob("*/a*/build.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+            try:
+                build = SceneBuild.model_validate_json(path.read_bytes())
+                validate_build(build, context, slot, revision)
+                validate_artifacts(build, self.runtime.artifact_root, project_id)
+            except (OSError, ValueError):
+                continue
+            return build
+        return None
+
     async def scene_job(self, project_id, scene_id, job_id, context, instruction=None):
         try:
             async with self._scene_semaphore:
@@ -303,7 +318,10 @@ class Coordinator:
                 revision, slot = scene.requested_revision, scene.slot
                 task = SceneTask(project_id=project_id, job_id=job_id, context=context, slot=slot,
                                  revision=revision, previous_build=scene.build, edit_instruction=instruction)
-                build = await self.call("generate_scene", task)
+                build = (self.reusable_scene_build(project_id, scene_id, revision, context, slot)
+                         if scene.current_revision == 0 and instruction is None else None)
+                if build is None:
+                    build = await self.call("generate_scene", task)
                 validate_build(build, context, slot, revision)
                 validate_artifacts(build, self.runtime.artifact_root, project_id)
                 async with self.repo.lock(project_id):
@@ -319,8 +337,7 @@ class Coordinator:
                 require(outcome.project_id == project_id, "Preview outcome project mismatch")
                 validate_build(outcome.build, context, slot, revision)
                 validate_render(outcome.render, project_id, slot.end_frame - slot.start_frame)
-                expected_job_id = (f"{job_id}-afb" if outcome.build.generation_mode == "fallback"
-                                   else f"{job_id}-a{outcome.build.repair_attempts}")
+                expected_job_id = f"{job_id}-a{outcome.build.repair_attempts}"
                 require(outcome.render.job_id == expected_job_id, "Preview job identity mismatch")
                 validate_artifacts(outcome, self.runtime.artifact_root, project_id)
                 async with self.repo.lock(project_id):
