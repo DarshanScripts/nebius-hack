@@ -1,0 +1,45 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "message": {
+      "title": "Message",
+      "type": "string"
+    },
+    "scene_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Scene Ids",
+      "type": "array"
+    },
+    "selected_scene_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Selected Scene Id"
+    }
+  },
+  "required": [
+    "project_id",
+    "message",
+    "scene_ids"
+  ],
+  "title": "EditRoutingRequest",
+  "type": "object"
+}

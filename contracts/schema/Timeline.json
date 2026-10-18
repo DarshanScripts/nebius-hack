@@ -1,0 +1,168 @@
+{
+  "$defs": {
+    "SceneSlot": {
+      "additionalProperties": false,
+      "properties": {
+        "scene_id": {
+          "title": "Scene Id",
+          "type": "string"
+        },
+        "index": {
+          "maximum": 6,
+          "minimum": 1,
+          "title": "Index",
+          "type": "integer"
+        },
+        "start_frame": {
+          "minimum": 0,
+          "title": "Start Frame",
+          "type": "integer"
+        },
+        "end_frame": {
+          "exclusiveMinimum": 0,
+          "title": "End Frame",
+          "type": "integer"
+        },
+        "dialogue_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "title": "Dialogue Ids",
+          "type": "array"
+        },
+        "entry_state": {
+          "const": "clear_content",
+          "default": "clear_content",
+          "title": "Entry State",
+          "type": "string"
+        },
+        "exit_state": {
+          "const": "clear_content",
+          "default": "clear_content",
+          "title": "Exit State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "scene_id",
+        "index",
+        "start_frame",
+        "end_frame",
+        "dialogue_ids"
+      ],
+      "title": "SceneSlot",
+      "type": "object"
+    },
+    "TimedUtterance": {
+      "additionalProperties": false,
+      "properties": {
+        "dialogue_id": {
+          "title": "Dialogue Id",
+          "type": "string"
+        },
+        "start_frame": {
+          "minimum": 0,
+          "title": "Start Frame",
+          "type": "integer"
+        },
+        "end_frame": {
+          "exclusiveMinimum": 0,
+          "title": "End Frame",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "dialogue_id",
+        "start_frame",
+        "end_frame"
+      ],
+      "title": "TimedUtterance",
+      "type": "object"
+    },
+    "VideoSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "width": {
+          "const": 1080,
+          "default": 1080,
+          "title": "Width",
+          "type": "integer"
+        },
+        "height": {
+          "const": 1920,
+          "default": 1920,
+          "title": "Height",
+          "type": "integer"
+        },
+        "fps": {
+          "const": 30,
+          "default": 30,
+          "title": "Fps",
+          "type": "integer"
+        },
+        "duration_frames": {
+          "const": 1800,
+          "default": 1800,
+          "title": "Duration Frames",
+          "type": "integer"
+        },
+        "scene_count": {
+          "const": 6,
+          "default": 6,
+          "title": "Scene Count",
+          "type": "integer"
+        }
+      },
+      "title": "VideoSpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "script_revision": {
+      "title": "Script Revision",
+      "type": "integer"
+    },
+    "video": {
+      "$ref": "#/$defs/VideoSpec"
+    },
+    "utterances": {
+      "items": {
+        "$ref": "#/$defs/TimedUtterance"
+      },
+      "maxItems": 12,
+      "minItems": 12,
+      "title": "Utterances",
+      "type": "array"
+    },
+    "scenes": {
+      "items": {
+        "$ref": "#/$defs/SceneSlot"
+      },
+      "maxItems": 6,
+      "minItems": 6,
+      "title": "Scenes",
+      "type": "array"
+    }
+  },
+  "required": [
+    "project_id",
+    "script_revision",
+    "utterances",
+    "scenes"
+  ],
+  "title": "Timeline",
+  "type": "object"
+}

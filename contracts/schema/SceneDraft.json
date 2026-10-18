@@ -1,0 +1,73 @@
+{
+  "$defs": {
+    "AnimationCue": {
+      "additionalProperties": false,
+      "properties": {
+        "cue_id": {
+          "title": "Cue Id",
+          "type": "string"
+        },
+        "word_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Word Ids",
+          "type": "array"
+        },
+        "start_frame": {
+          "minimum": 0,
+          "title": "Start Frame",
+          "type": "integer"
+        },
+        "end_frame": {
+          "exclusiveMinimum": 0,
+          "title": "End Frame",
+          "type": "integer"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "claim_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Claim Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "cue_id",
+        "start_frame",
+        "end_frame",
+        "description"
+      ],
+      "title": "AnimationCue",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "source_code": {
+      "title": "Source Code",
+      "type": "string"
+    },
+    "summary": {
+      "title": "Summary",
+      "type": "string"
+    },
+    "cues": {
+      "items": {
+        "$ref": "#/$defs/AnimationCue"
+      },
+      "title": "Cues",
+      "type": "array"
+    }
+  },
+  "required": [
+    "source_code",
+    "summary"
+  ],
+  "title": "SceneDraft",
+  "type": "object"
+}

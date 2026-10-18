@@ -8,7 +8,7 @@ A hackathon application turns a topic into a one-minute educational Instagram re
 
 The speakers are **Sundar Pichai** and **Jensen Huang**. These are scripted characters in a generated discussion, not quotations from an actual conversation. One asks skeptical or adversarial questions, and the other answers or challenges the premise. Both can counterargue. Ground factual statements in the research and preserve uncertainty about proprietary infrastructure.
 
-We have **five people, five coding agents, and an original five-hour build window**. Member 1 is the project owner and maintains `main`. Members develop on five separate branches and submit their changes for merging into `main`. Planning/configuration files exist; application modules are still to be implemented. The owner has created the Nebius VM; it is awaiting Running status and IP assignment. Everyone can begin against fixtures immediately.
+We have **five people, five coding agents, and an original five-hour build window**. Member 1 is the project owner and maintains `main`. Members develop on five separate branches and submit their changes for merging into `main`. Member 1's initial platform implementation is on `feat/m1-platform`: canonical contracts/JSON Schemas, settings/runtime, file persistence, timeline, FastAPI routes, coordinator, deployment wiring, and a fixture demo. The four member-owned feature modules are still to be merged. The owner has created the Nebius VM; its public IP has not been supplied. Everyone can begin against fixtures immediately.
 
 ## Product flow
 
@@ -94,7 +94,9 @@ An earlier Terraform preview used `maroon-carp-instance-6`; the final review use
 
 The RTX PRO 6000 is Blackwell: member 3 must choose PyTorch/CUDA binaries that support this GPU and lock compatible dependencies independently for Chatterbox and WhisperX. Host CUDA 13 does not automatically make an old package's bundled CUDA kernels compatible. Verify actual GPU inference inside each container before serving it. Member 1 owns host setup/deployment; teammates do not need VM access or real API keys to start fixture-based implementation.
 
-Use root `.env.example` as the configuration reference. Root `.env` is a local, ignored template with empty credentials and mock mode enabled. No keys have been supplied. The frontend receives only the public API URL. There is no requirement to provision Kubernetes, queues, or object storage for the five-hour version.
+Use root `.env.example` as the configuration reference. The owner's ignored `.env` already contains NVIDIA/Tavily credentials and generated internal service secrets; those values are absent from shared files. Teammates can copy `.env.example` for mock development. The frontend receives only the public API URL. There is no requirement to provision Kubernetes, queues, or object storage for the five-hour version.
+
+The initial NVIDIA capability probes returned HTTP 500 for both plain JSON and tool calling. Live endpoint/model/account availability is unresolved. Keep `json_prompt` as the configured default pending a successful probe, and do not claim verified tool/schema support. Run `python -m scripts.check_nemotron` to recheck; it writes only credential-free results under ignored `output/capabilities/`.
 
 ## Team map
 
