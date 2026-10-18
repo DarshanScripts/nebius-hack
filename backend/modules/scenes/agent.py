@@ -21,6 +21,7 @@ from .worker_client import setting
 
 AUTHORING_GUIDE = (Path(__file__).parent / "scene_authoring.md").read_text()
 MAX_AGENT_STEPS = 14
+REPORT_EXCERPT_CHARS = 6000
 
 
 def scene_brief(task: SceneTask) -> dict[str, Any]:
@@ -34,14 +35,24 @@ def scene_brief(task: SceneTask) -> dict[str, Any]:
             entry["words"] = [{"word_id": w.word_id, "text": w.text, "start": w.start, "end": w.end} for w in words if w.dialogue_id == t.dialogue_id]
         turns.append(entry)
     image = next((s for s in ctx.images.selections if s.query.scene_index == slot.index), None)
+    report = ctx.research.report_markdown
     return {
         "topic": ctx.research.topic,
         "reel_title": ctx.script.title,
         "scene": {"scene_id": slot.scene_id, "index": slot.index, "of": 6, "duration_frames": slot.end_frame - slot.start_frame, "fps": 30, "interior": [12, slot.end_frame - slot.start_frame - 12], "dialogue_ids": slot.dialogue_ids},
         "dialogue": turns,
+        "research": {
+            "summary": ctx.research.summary,
+            "report_excerpt": report[:REPORT_EXCERPT_CHARS] + ("\n[report truncated]" if len(report) > REPORT_EXCERPT_CHARS else ""),
+            "sources": [{"source_id": s.source_id, "title": s.title} for s in ctx.research.sources],
+            "is_mock": ctx.research.is_mock,
+        },
         "claims": [c.model_dump(mode="json") for c in ctx.research.claims],
         "uncertainties": ctx.research.uncertainties,
-        "image": None if image is None else {"status": image.status, "description": image.description, "reason": image.reason},
+        "image": None if image is None else {"status": image.status, "description": image.description, "reason": image.reason, "usable_with": "SceneImage" if image.status == "selected" else None},
+        "other_scene_images": [{"scene_index": s.query.scene_index, "status": s.status, "description": s.description} for s in ctx.images.selections if s.query.scene_index != slot.index],
+        "timeline": [{"scene_id": s.scene_id, "start_frame": s.start_frame, "end_frame": s.end_frame, "dialogue_ids": s.dialogue_ids} for s in ctx.timeline.scenes],
+        "theme": ctx.theme.model_dump(mode="json"),
     }
 
 
