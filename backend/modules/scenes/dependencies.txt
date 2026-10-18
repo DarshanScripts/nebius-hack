@@ -1,4 +1,5 @@
-# Member 4 (backend/modules/scenes) Python dependency fragment for member 1's root lock.
+# Member 4 (backend/modules/scenes) Python dependency fragment. All of these are already in the root
+# pyproject.toml / uv.lock from Member 1's seed (d3dfba6); nothing to add.
 # Versions below are the ones this module was developed and tested with.
 pydantic>=2.14,<3
 httpx>=0.28,<0.29

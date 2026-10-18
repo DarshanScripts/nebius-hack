@@ -1,7 +1,8 @@
 # Member 4 — scene agents, edit router, Remotion render worker
 
 Owner paths: `backend/modules/scenes/` (Python) and `renderer/` (Node 22 + Remotion 4.0.534).
-Branch: `feat/m4-scenes-renderer`. Contracts: `contracts.models` exactly as in `plan.md` §9 (no changes proposed).
+Branch: `feat/m4-scenes-renderer` (includes Member 1's platform seed `d3dfba6`). Uses `contracts.models` and
+`contracts.validation` unchanged; no shared-contract change is required.
 
 ## Callable interfaces (`backend/modules/scenes/service.py`)
 
@@ -12,7 +13,8 @@ async def render_preview(request: PreviewRequest, runtime: Runtime) -> ScenePrev
 async def render_final(request: FinalRenderRequest, runtime: Runtime) -> RenderResult
 ```
 
-All return validated models or raise `StageFailure(PipelineError)`. No snapshot/event writes;
+All return validated models or raise `StageFailure(PipelineError)`. Builds/renders are checked with core's
+`validate_context` (structure + hashes), `validate_build` and `validate_render` before returning. No snapshot/event writes;
 progress goes through `runtime.report_progress` after every worker poll (stage `scene_preview` +
 scene id with the **operation** id, or `final` with no scene id).
 
@@ -21,9 +23,9 @@ scene id with the **operation** id, or `final` with no scene id).
 | Target scene decided deterministically ("scene six", "scene 6", "s06", "sixth scene", selected id). Requests that change a locked layer (several scenes, the soundtrack, spoken words/captions, scene length, the character layer, theme/title) → `unsupported` with a reason. Words are matched in context, so diagram edits such as "voice packets", "a longer arrow" or "animation timing" stay editable. Pattern-based: tested on 21 editable and 19 locked-layer phrasings (plus 4 targeting errors), not exhaustive. Live mode: Nemotron structured output may refine the instruction or flag unsupported, never retarget. | `router.py` |
 | Mock mode: deterministic fixture source per scene (`fixtures/scenes/sNN.tsx`, edits use `sNN_edit.tsx` or the fallback template), `generation_mode="mock"`, still validated by the worker. | `service.py` |
 | Live mode: one isolated agent invocation per scene. `NEMOTRON_STRUCTURED_MODE=tool_calling` → LangChain `create_agent(runtime.llm, tools=[read_scene_context, read_previous_source, validate_scene_source], response_format=ToolStrategy(SceneDraft))`; `json_prompt` → `runtime.structured(schema=SceneDraft)`. | `agent.py` |
-| Generate → worker `/validate` → repair with diagnostics, **max 2 corrective attempts total across validation and preview** (`SceneBuild.repair_attempts`), then the deterministic fallback template (`generation_mode="fallback"`, `warnings[0]` starts `FALLBACK:`). Model transport/auth errors are a retryable `SCENE_AGENT_UNAVAILABLE` stage error, never a silent fallback. A `StageFailure` from `runtime.structured` counts as a repair attempt when its code names an output problem (`INVALID`/`SCHEMA`/`PARSE`/`VALIDATION`/`STRUCTURED`/`JSON`, and none of `UNAVAILABLE`/`TIMEOUT`/`AUTH`/`RATE`/…); otherwise it is re-raised. **Member 1:** please keep core's invalid-output code within that vocabulary. A preview repair of an edit keeps the user's instruction (read from the operation's `task.json`). | `service.py` |
+| Generate → worker `/validate` → repair with diagnostics. Attempt slots `a0..a2` (core accepts only worker ids `-a0/-a1/-a2`): `a0` = first draft, corrective attempts up to `SCENE_REPAIR_ATTEMPTS` (default 2) across validation **and** preview; the **last** corrective slot is the deterministic fallback template (`generation_mode="fallback"`, `warnings[0]` starts `FALLBACK:`). Default: a0 agent → a1 agent repair → a2 fallback. If no slot is left (e.g. a failing fallback, or `SCENE_REPAIR_ATTEMPTS=0`) → `SCENE_REPAIRS_EXHAUSTED` stage error. Model transport/auth errors are a retryable `SCENE_AGENT_UNAVAILABLE` stage error, never a silent fallback. A `StageFailure` from `runtime.structured` counts as a repair attempt when its code names an output problem (`INVALID`/`SCHEMA`/`PARSE`/`VALIDATION`/`STRUCTURED`/`JSON`, and none of `UNAVAILABLE`/`TIMEOUT`/`AUTH`/`RATE`/…); otherwise it is re-raised. Core's codes classify as intended: `STRUCTURED_OUTPUT_INVALID` → repair; `MODEL_REQUEST_FAILED`, `MISSING_CONFIGURATION`, `MOCK_LLM_DISABLED` → raised. A preview repair of an edit keeps the user's instruction (read from the operation's `task.json`). | `service.py` |
 | Cue frames that name word ids are recomputed from the measured words (LLM cannot move timing); unknown word/claim ids, duplicates and out-of-range untimed cues are repair diagnostics. | `timing.py` |
-| Worker job id `<operation_id>-a<repair_attempts>` (fallback: `<operation_id>-afb`), preserved in the returned `RenderResult`. | `service.worker_job_id` |
+| Worker job id `<operation_id>-a<repair_attempts>` (fallback included), preserved in the returned `RenderResult`. | `service.worker_job_id` |
 | Agent brief: topic, all 12 turns (own turns with scene-local word frames), research summary + report excerpt + sources + claims + uncertainties, own and other scenes' image choices, the six-slot timeline, theme. | `agent.scene_brief` |
 | Shared authoring context for every agent (theme, coordinates, kit API, timing/boundary rules, import allowlist, working example — the example is compiled by the test suite). | `scene_authoring.md` |
 
@@ -33,7 +35,6 @@ Artifacts (all immutable, relative keys):
 projects/<id>/scenes/<sid>/v<rev>/<operation_id>/task.json                     # edit instruction for this operation
 projects/<id>/scenes/<sid>/v<rev>/<operation_id>/a<n>/{Scene.tsx,validation.json,build.json,preview.mp4,poster.jpg,render-job.json}
 projects/<id>/scenes/<sid>/v<rev>/<operation_id>/a<n>/candidates/NN/Scene.tsx   # tool_calling validate calls
-projects/<id>/scenes/<sid>/v<rev>/<operation_id>/afb/...                         # fallback build
 projects/<id>/final/<job_id>/{reel.mp4,poster.jpg,render-job.json}               # manifest.json is member 1's
 ```
 
@@ -75,89 +76,101 @@ cannot be checked statically.)
 
 ## Setup and commands
 
-From the repository root (Python 3.11, Node 22):
+From the repository root, using the platform's root environment (Python ≥ 3.11, Node 22):
 
 ```bash
-uv venv --python 3.11 .venv
-uv pip install --python .venv/bin/python -r backend/modules/scenes/dependencies.txt
+uv sync                      # root pyproject/uv.lock (Member 1); this module needs nothing extra
 npm ci --prefix renderer
-# until contracts/models.py lands on main: plan.md section 2 bootstrap into ignored .bootstrap/
-export PYTHONPATH="$PWD/.bootstrap:$PWD"
 
-# tests (offline, no worker, no model calls; one test runs the real TS validator)
-.venv/bin/python -m pytest backend/modules/scenes/tests -q
+# tests: offline, no worker, no model calls (one test runs the real TS validator)
+uv run python -m pytest backend/modules/scenes/tests -q
 npm test --prefix renderer && npm run typecheck --prefix renderer
 
-# full fixture acceptance: starts its own worker on :8011 with ARTIFACT_ROOT=--output
-.venv/bin/python -m backend.modules.scenes.demo --mock --output output/demos/scenes
-# same, with MOCK transparent character PNGs instead of silhouettes. Use a separate --output:
-# artifacts are immutable, so a different fixture variant in the same project namespace is refused.
-.venv/bin/python -m backend.modules.scenes.demo --mock --character-pngs --output output/demos/scenes-png
+# full fixture acceptance; starts its own worker on :8011 with ARTIFACT_ROOT=--output.
+# Artifacts are immutable: use a fresh --output per fixture variant.
+uv run python -m backend.modules.scenes.demo --mock --output output/demos/scenes
+uv run python -m backend.modules.scenes.demo --mock --character-pngs --output output/demos/scenes-png
 
-# worker alone (what compose runs); relative ARTIFACT_ROOT resolves against the repo root
-ARTIFACT_ROOT=./output RENDER_WORKER_TOKEN=<secret> npm run worker --prefix renderer
+# Member 1's real Coordinator driving this module (core content/voice fixtures + real scenes,
+# edit and Stitch) against a running worker whose ARTIFACT_ROOT is --output
+RENDER_WORKER_TOKEN=<token> uv run python -m backend.modules.scenes.integration_check \
+    --worker-url http://127.0.0.1:8001 --output output/demos/scenes-core
 
-# one live scene through the configured Nemotron endpoint (needs NEMOTRON_* env)
-.venv/bin/python -m backend.modules.scenes.demo --output output/demos/scenes-live --only s02
+# worker alone; a relative ARTIFACT_ROOT resolves against the repo root
+ARTIFACT_ROOT=./output RENDER_WORKER_TOKEN=<token> npm run worker --prefix renderer
+
+# live: one scene with core's AppRuntime and the root .env (NEMOTRON_*), see limitations below
+uv run python -m backend.modules.scenes.demo --output output/demos/scenes-live --only s02
 ```
 
-Optional env: `REMOTION_BROWSER_EXECUTABLE` (use an existing chrome-headless-shell instead of
-Remotion's download), `RENDER_CHROME_CONCURRENCY`, `RENDER_WORK_DIR` (default `renderer/.jobs`),
-`RENDER_KEEP_JOB_DIRS=true`, `FFPROBE_PATH` (default: Remotion's bundled ffprobe),
-`RENDER_POLL_INTERVAL_SECONDS`, `SCENE_REPAIR_ATTEMPTS` (≤2). Settings are read from
-`runtime.settings` (either case) then the environment.
+Environment variables (root `.env.example` names; read from `runtime.settings`, uppercase, then the
+process environment):
 
-Docker: `docker build -t reel-renderer renderer` (Remotion's Debian/Chrome guidance + DejaVu,
-non-root user, healthcheck; image 1.42 GB). Compose (member 1): service `renderer`, port 8001, mount
-the shared volume at `/workspace/output`, pass `RENDER_WORKER_TOKEN`, `RENDER_CONCURRENCY`,
-`RENDER_JOB_TIMEOUT_SECONDS`; no model credentials.
+| Variable | Used by | Purpose |
+| --- | --- | --- |
+| `RENDER_WORKER_URL`, `RENDER_WORKER_TOKEN` | Python client, worker | worker address; bearer secret for `/jobs` and `/validate` |
+| `RENDER_JOB_TIMEOUT_SECONDS`, `RENDER_CONCURRENCY` | both | per-job deadline; parallel encodes (default 1) |
+| `ARTIFACT_ROOT` | worker | shared output root (`/workspace/output` in compose) |
+| `NEMOTRON_STRUCTURED_MODE`, `SCENE_REPAIR_ATTEMPTS` | Python | `json_prompt` / `tool_calling`; corrective attempts (≤ 2) |
+| `MOCK_MODE`, `NEMOTRON_*` | core runtime | fixture vs agent generation; model endpoint (core's `Runtime.llm/structured`) |
+| optional: `REMOTION_BROWSER_EXECUTABLE`, `RENDER_CHROME_CONCURRENCY`, `RENDER_WORK_DIR`, `RENDER_KEEP_JOB_DIRS`, `FFPROBE_PATH`, `RENDER_POLL_INTERVAL_SECONDS`, `RENDER_WORKER_HOST` | worker/client | local Chrome, Chrome tabs, job dir, keep job dirs, ffprobe path (default Remotion's bundled one), poll interval, bind address |
 
-**Member 1 — required compose setting:** run `renderer` with the **same uid:gid as `api`**
-(e.g. `user: "1000:1000"`). The API creates the scene directories on the shared volume and the
-worker writes `preview.mp4`/`reel.mp4` into them; with the image's default uid 10001 the publish
-step fails with `EACCES` (reproduced). The image is built to run under any uid.
+Docker: the build context is the **repository root**, matching `infra/compose.yml`
+(`context: ..`, `dockerfile: renderer/Dockerfile`):
 
-## Acceptance results (2026-10-18, laptop, mock mode, real Remotion renders)
+```bash
+docker build -f renderer/Dockerfile -t reel-renderer .
+docker compose --env-file .env -f infra/compose.yml build renderer   # verified: builds unchanged compose
+```
 
-Snapshot: code as committed after the review fixes. Run `output/demos/scenes-png/demo-report-20261018-1453.json`
-(`--mock --character-pngs`, 2 min 35 s). Every row below was measured on this run's artefacts.
+The image (1.42 GB: Remotion's Debian/Chrome guidance, Chrome Headless Shell, DejaVu) runs as uid
+10001, the same uid as `infra/Dockerfile.api`, so api and renderer can write each other's
+directories on the shared volume; the host `output/` must be writable by uid/gid 10001. It also runs
+under any other uid via compose `user:`. No model credentials are needed in the container.
 
-| Check | Result |
-| --- | --- |
-| Six scenes generated + worker-validated | 6 × `mock`; all six validated in ~3 s (concurrent) |
-| Previews submitted `s03,s01,s06,s02,s05,s04` | completed in that order; frames 273/270/270/270/270/447 = slot durations; ~12 s each |
-| Route "Please correct scene six: make the packet diagram clearer" | `edit_scene`, `s06` |
-| Edit s06 rev 1 → 2 | s06 source hash changed; s01–s05 source hashes unchanged; timeline hash unchanged; preview 447 frames |
-| Repair loop → fallback (canned broken model, `json_prompt` path) | 3 drafts (a0,a1,a2) rejected by the real validator, fallback `afb`, `repair_attempts=2`, `FALLBACK:` warning, preview rendered |
-| Final master `final-20261018-1453/reel.mp4` | 1800 frames, 1080×1920, 30/1, h264 `yuv420p`, aac 48 kHz, 60.01 s, 39.5 s render |
-| Audio at joins | silent at 0.0 s (before first utterance), speech at 1.0 s, silent at 8.9 s (scene gap), speech at 17 s / 50 s, silent at 55 s (after 53.7 s) |
-| Character PNGs + boundary (frames 130/138/1340/1353/1366/1500) | inspected: transparent cut-outs over the dot grid, clipped to the bottom region; Sundar slides out / Jensen in at a turn change; s05 board until its fade, empty board at the 1353 cut, s06 fading in; captions follow global turns |
-| Python tests | 70 passed |
-| Same path in the Docker image (`reel-renderer:m4`, `--user 1000:1000`, auth on), run `output/demos/scenes-docker-full/demo-report-20261018-1537.json` | completed: 6 previews in order, s06 edit, fallback, final 1800 frames 1080×1920 30/1 h264 `yuv420p` aac 60.01 s; audio silent/speech at the same points; frames 138/1353/1500 inspected; container env holds no model keys |
-| Renderer tests / typecheck | 8 passed with `OLD_REEL` set (7 + 1 skipped without it; that test proves a full-range file is rejected) / clean |
+## Integration steps for Member 1
 
-The silhouette-placeholder variant (no PNGs) was rendered and inspected in run
-`output/demos/scenes/demo-report-20261018-1437.json` (before the review fixes; same render code
-path except the character image branch).
+1. Merge `feat/m4-scenes-renderer` (it already contains `d3dfba6`; only `backend/modules/scenes/`
+   and `renderer/` differ). No contract, root manifest or lockfile change is needed: imports are
+   `pydantic`, `httpx`, `langchain`, `langchain-openai`, all in the root `pyproject.toml`.
+2. The API picks the module up via `backend.modules.scenes.service` (the coordinator's `STAGES`
+   map); no core code change.
+3. Compose: the existing `renderer` service works as is. Set `RENDER_WORKER_TOKEN` in `.env` (same
+   value for api and renderer) and make sure the host `output/` is writable by uid 10001.
+4. Mock deployment smoke test: `MOCK_MODE=true`, create a project, wait for six ready previews,
+   send "Please correct scene six: make the packet diagram clearer", then Stitch. The same flow ran
+   locally through `integration_check` against the compose-built image (results below).
+5. Live: see the Nemotron limitations below. Recommended `Runtime.llm` change for Member 1 (not applied):
+   `extra_body={"chat_template_kwargs": {"enable_thinking": False}}` and `NEMOTRON_TIMEOUT_SECONDS≥300`.
 
-Bad-source probe (`/tmp` files, see engineering log): every policy class and TS errors reported
-with line numbers; syntax errors reported.
+## Acceptance results (2026-10-18, laptop)
 
-## Blockers / not verified
+Code as committed after merging `d3dfba6`. Every row was measured on the run it names.
 
-- **Live Nemotron scene generation: BLOCKED.** With the key available in this shell
-  (`NVIDIA_API_KEY` mapped to `NEMOTRON_API_KEY`), `/v1/models` lists
-  `nvidia/nemotron-3.5-super-vl-120b-a12b` but chat completion returns `403 Authorization failed`.
-  Needs the project's NVIDIA key (owner's `.env`). The failure path was verified: it raises a
-  retryable `SCENE_AGENT_UNAVAILABLE` and the run report is still written
-  (`output/demos/scenes-live/demo-report-20261018-1440.json`).
-- `tool_calling` mode (create_agent + ToolStrategy) is implemented but unexercised against
-  Nemotron; it depends on member 1's capability check.
-- Docker image built and verified locally (see table). Cloud rendering on the Nebius VM is
-  member 1's deployment step; it needs the compose `user:` setting above.
-- Real character PNGs not in the repo yet; the image path is exercised with MOCK transparent PNGs
-  (`--character-pngs`), the silhouette placeholder when absent.
-- `context_hash` is not recomputed by the worker (it checks build hashes == context fields);
-  member 1's `contracts/validation.py` owns canonical hashing.
+| Check | Run | Result |
+| --- | --- | --- |
+| Standalone mock acceptance (`--mock --character-pngs`, 2 min 40 s) | `output/demos/scenes-final/demo-report-20261018-1609.json` | previews submitted `s03,s01,s06,s02,s05,s04` completed in that order, frames 273/270/270/270/270/447 = slot durations; routed edit s06 rev 1 → 2 with s01–s05 source hashes and timeline hash unchanged; canned broken model → a0, a1 rejected by the real validator → fallback in **a2** (`repair_attempts=2`, `FALLBACK:` warning), preview rendered; final 1800 frames, 1080×1920, 30/1, h264 `yuv420p`, aac, 60.01 s (39.5 s render); audio silent at 0.0 s / 8.9 s / 55 s, speech at 1.0 s / 50 s |
+| **Core Coordinator → this module → compose-built worker image** | `output/demos/scenes-core/integration-report-20261018-1551.json` | core's own checks accepted all six builds/previews (`validate_build`, `validate_render`, artifacts, `-a0` job ids); `scene.ready` events arrived out of order (s02 first) with slots kept; `coordinator.edit` routed to s06 → rev 2, others unchanged, project revision 2; `coordinator.stitch` → manifest written by core, final completed, 1800 frames h264 `yuv420p` 1080 + aac; 155 progress events; frames inspected |
+| **Live Nemotron scene (json_prompt)** | `output/demos/scenes-live3/live-report-20261018-1605.json` | s02 generated by the agent (`generation_mode=agent`, 0 repairs, 148 s), passed the real validator, 270-frame preview rendered; 3 word-backed cues citing `c002`; inspected: correct phone/relay diagram timed to the words, one text overlap in a caption box (guide rule added afterwards, not re-run). Ran with a standalone runtime with thinking disabled (see limitations) |
+| Python tests | — | 72 passed; core suite 10 passed |
+| Renderer tests / typecheck | — | 8 passed with `OLD_REEL` set (7 + 1 skipped without) / clean |
+| Earlier evidence, still valid | `scenes-docker-full/demo-report-20261018-1537.json` | full mock path inside the Docker image (pre-merge build context) |
+
+## Remaining limitations / blockers
+
+- **Live generation through core's runtime times out (Member 1 change needed).** With the `.env` key,
+  tiny requests answer in < 1 s, but the model spends its output on hidden reasoning; a full scene
+  through core's `AppRuntime` hit the 180 s `NEMOTRON_TIMEOUT_SECONDS` (`MODEL_REQUEST_FAILED`).
+  With `chat_template_kwargs.enable_thinking=false` the same request succeeds (see live row).
+  Core owns `Runtime.llm`; suggested: that `extra_body` (or a setting for it) and a 300 s timeout.
+- **Intermittent HTTP 500** (`Failed to generate completions`) from the NVIDIA endpoint on one
+  full-size request; the identical request succeeded minutes later. It surfaces as a retryable
+  `SCENE_AGENT_UNAVAILABLE`; a scene retry recovers.
+- **Model JSON is sometimes malformed** (one reply string-escaped the `cues` array); the runtime's
+  structured-output repair handles it, at the cost of an extra call.
+- `tool_calling` mode (create_agent + ToolStrategy) is implemented but not yet run live.
+- Only one live scene was generated; six-scene live quality, edits and live final are unverified.
+- Real character PNGs are not in the repo; MOCK transparent PNGs exercise the image path.
+- The edit router is pattern-based (accepted limitation, see backlog).
 
 More: `doc/engineering-log.md`, `doc/backlog.md` in this directory.
