@@ -58,3 +58,20 @@
   .hero-illustration{transform:rotate(-17deg) scale(.74);transform-origin:top right;opacity:.45}
   .sidebar{padding-bottom:18px}.sidebar-label{margin-top:25px;margin-bottom:10px}.sidebar-empty{gap:5px}.empty-folder{width:56px;height:56px;margin:3px 0 4px;border-radius:16px}
 }
+@media(min-width:761px){
+  .workspace.sidebar-collapsed .sidebar{padding:18px 10px}
+  .workspace.sidebar-collapsed .brand{width:100%;min-height:0;padding:0;display:flex;flex-direction:column;align-items:center;gap:8px}
+  .workspace.sidebar-collapsed .brand-mark{width:46px;height:46px}
+  .workspace.sidebar-collapsed .sidebar-toggle{display:grid;place-items:center;width:46px;height:34px;margin:0;padding:0;border-radius:8px;font-size:27px}
+  .workspace.sidebar-collapsed .sidebar-toggle:hover{background:#20372e}
+  .workspace.sidebar-collapsed .new-button{display:grid;place-items:center;width:54px;height:50px;margin-top:16px;padding:0;text-align:center}
+  .workspace.sidebar-collapsed .new-button span:first-child{margin:0;font-size:27px;line-height:1}
+  .workspace.sidebar-collapsed .new-button-label,.workspace.sidebar-collapsed .sidebar-label,.workspace.sidebar-collapsed .project-copy,.workspace.sidebar-collapsed .sidebar-empty strong,.workspace.sidebar-collapsed .sidebar-empty>span,.workspace.sidebar-collapsed .sidebar-foot-copy,.workspace.sidebar-collapsed .foot-arrow{display:none}
+  .workspace.sidebar-collapsed .project-list{width:100%;margin-top:20px}
+  .workspace.sidebar-collapsed .project-item{justify-content:center;align-items:center;width:54px;height:50px;padding:0;margin:0 0 6px}
+  .workspace.sidebar-collapsed .project-icon{font-size:21px}
+  .workspace.sidebar-collapsed .sidebar-empty{margin:0}
+  .workspace.sidebar-collapsed .empty-folder{width:50px;height:50px;margin:0;border-radius:13px}
+  .workspace.sidebar-collapsed .sidebar-foot{display:grid;place-items:center;width:54px;min-height:52px;padding:0;margin-top:auto}
+}
+@media(max-width:760px){.new-button-label{display:none}.brand-copy{display:none}.sidebar-toggle{display:none}}
