@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="568" viewBox="0 0 320 568">
+  <rect width="320" height="568" fill="#f5f8f2"/>
+  <defs><pattern id="dots" width="16" height="16" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1" fill="#d8e2d5"/></pattern></defs>
+  <rect width="320" height="568" fill="url(#dots)"/>
+  <rect x="25" y="42" width="270" height="353" rx="14" fill="white" stroke="#dce8d6"/>
+  <text x="160" y="155" text-anchor="middle" fill="#345b3b" font-family="sans-serif" font-size="21" font-weight="bold">MOCK SCENE</text>
+  <circle cx="160" cy="248" r="49" fill="#e5f2d9"/>
+  <path d="M138 248h44m-15-15 15 15-15 15" fill="none" stroke="#548a45" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="160" y="332" text-anchor="middle" fill="#839c82" font-family="sans-serif" font-size="12">Fixture preview · no provider call</text>
+  <circle cx="95" cy="470" r="35" fill="#d7e7fa"/><circle cx="225" cy="470" r="35" fill="#e2efcc"/>
+  <text x="95" y="479" text-anchor="middle" fill="#376199" font-family="sans-serif" font-size="26" font-weight="bold">S</text>
+  <text x="225" y="479" text-anchor="middle" fill="#5d792f" font-family="sans-serif" font-size="26" font-weight="bold">J</text>
+</svg>
