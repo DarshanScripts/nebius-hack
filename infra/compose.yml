@@ -1,0 +1,52 @@
+name: grounded-reel
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.api
+    env_file: ../.env
+    environment:
+      ARTIFACT_ROOT: /workspace/output
+      ASSETS_ROOT: /workspace/assets
+      RENDER_WORKER_URL: http://renderer:8001
+      VOICE_API_URL: http://chatterbox:8002/v1/tts
+      ALIGNMENT_API_URL: http://whisperx:8003/v1/align
+    volumes:
+      - ../output:/workspace/output
+      - ../assets:/workspace/assets:ro
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  renderer:
+    build:
+      context: ..
+      dockerfile: renderer/Dockerfile
+    environment:
+      ARTIFACT_ROOT: /workspace/output
+      RENDER_WORKER_PORT: "8001"
+      RENDER_WORKER_TOKEN: ${RENDER_WORKER_TOKEN:?Fill RENDER_WORKER_TOKEN}
+      RENDER_CONCURRENCY: ${RENDER_CONCURRENCY:-1}
+      RENDER_JOB_TIMEOUT_SECONDS: ${RENDER_JOB_TIMEOUT_SECONDS:-900}
+    volumes:
+      - ../output:/workspace/output
+    group_add:
+      - "10001"
+    shm_size: 2gb
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.web
+      args:
+        VITE_API_BASE_URL: ""
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    restart: unless-stopped

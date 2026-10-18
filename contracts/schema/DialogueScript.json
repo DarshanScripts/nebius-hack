@@ -1,0 +1,111 @@
+{
+  "$defs": {
+    "DialogueTurn": {
+      "additionalProperties": false,
+      "properties": {
+        "dialogue_id": {
+          "title": "Dialogue Id",
+          "type": "string"
+        },
+        "order": {
+          "maximum": 12,
+          "minimum": 1,
+          "title": "Order",
+          "type": "integer"
+        },
+        "scene_index": {
+          "maximum": 6,
+          "minimum": 1,
+          "title": "Scene Index",
+          "type": "integer"
+        },
+        "speaker_id": {
+          "enum": [
+            "sundar",
+            "jensen"
+          ],
+          "title": "Speaker Id",
+          "type": "string"
+        },
+        "text": {
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "intent": {
+          "enum": [
+            "hook",
+            "question",
+            "answer",
+            "challenge",
+            "takeaway"
+          ],
+          "title": "Intent",
+          "type": "string"
+        },
+        "claim_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Claim Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "dialogue_id",
+        "order",
+        "scene_index",
+        "speaker_id",
+        "text",
+        "intent"
+      ],
+      "title": "DialogueTurn",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "script_revision": {
+      "minimum": 1,
+      "title": "Script Revision",
+      "type": "integer"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "language": {
+      "const": "en",
+      "default": "en",
+      "title": "Language",
+      "type": "string"
+    },
+    "turns": {
+      "items": {
+        "$ref": "#/$defs/DialogueTurn"
+      },
+      "maxItems": 12,
+      "minItems": 12,
+      "title": "Turns",
+      "type": "array"
+    }
+  },
+  "required": [
+    "project_id",
+    "script_revision",
+    "title",
+    "turns"
+  ],
+  "title": "DialogueScript",
+  "type": "object"
+}

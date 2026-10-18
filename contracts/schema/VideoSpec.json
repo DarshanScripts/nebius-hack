@@ -1,0 +1,37 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "width": {
+      "const": 1080,
+      "default": 1080,
+      "title": "Width",
+      "type": "integer"
+    },
+    "height": {
+      "const": 1920,
+      "default": 1920,
+      "title": "Height",
+      "type": "integer"
+    },
+    "fps": {
+      "const": 30,
+      "default": 30,
+      "title": "Fps",
+      "type": "integer"
+    },
+    "duration_frames": {
+      "const": 1800,
+      "default": 1800,
+      "title": "Duration Frames",
+      "type": "integer"
+    },
+    "scene_count": {
+      "const": 6,
+      "default": 6,
+      "title": "Scene Count",
+      "type": "integer"
+    }
+  },
+  "title": "VideoSpec",
+  "type": "object"
+}
