@@ -10,6 +10,7 @@ touch snapshot/event state; progress goes through runtime.report_progress.
 """
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -51,9 +52,13 @@ def _max_repairs(runtime: Any) -> int:
     return max(0, min(2, int(setting(runtime, "SCENE_REPAIR_ATTEMPTS", 2))))
 
 
+def operation_dir(task: SceneTask) -> str:
+    return f"projects/{task.project_id}/scenes/{task.slot.scene_id}/v{task.revision}/{task.job_id}"
+
+
 def attempt_dir(task: SceneTask, attempt: int | str) -> str:
     """projects/<id>/scenes/<sid>/v<rev>/<operation_id>/a<n> (a fallback build uses 'afb')."""
-    return f"projects/{task.project_id}/scenes/{task.slot.scene_id}/v{task.revision}/{task.job_id}/a{attempt}"
+    return f"{operation_dir(task)}/a{attempt}"
 
 
 def worker_job_id(operation_id: str, build: SceneBuild) -> str:
@@ -102,6 +107,18 @@ async def _validate(task: SceneTask, client: RenderWorkerClient, build: SceneBui
     return [] if res.valid else (res.diagnostics or ["validator returned invalid without diagnostics"])
 
 
+_OUTPUT_PROBLEM_MARKERS = ("INVALID", "SCHEMA", "PARSE", "VALIDATION", "STRUCTURED", "MALFORMED", "JSON")
+_TRANSPORT_MARKERS = ("UNAVAILABLE", "TIMEOUT", "AUTH", "FORBIDDEN", "PERMISSION", "RATE", "QUOTA", "NETWORK", "CONNECT", "CONFIG")
+
+
+def _is_output_problem(error: PipelineError) -> bool:
+    """A runtime.structured failure caused by the model's answer (counts as a repair attempt),
+    as opposed to a provider/transport/config failure (raised as a stage error).
+    Core's error codes are not fixed by the contract, so classify by marker, transport first."""
+    code = error.code.upper()
+    return not any(m in code for m in _TRANSPORT_MARKERS) and any(m in code for m in _OUTPUT_PROBLEM_MARKERS)
+
+
 def _is_transport_error(e: BaseException) -> bool:
     names = {c.__name__ for c in type(e).__mro__}
     return bool(names & {"HTTPError", "APIConnectionError", "APITimeoutError", "AuthenticationError", "PermissionDeniedError", "RateLimitError", "InternalServerError", "NotFoundError", "TimeoutError", "ConnectError"})
@@ -144,7 +161,7 @@ async def _agent_loop(task: SceneTask, runtime: Any, client: RenderWorkerClient,
         try:
             draft = await _draft(task, runtime, client, dir_key, previous_source, feedback)
         except StageFailure as e:
-            if e.error.code not in ("STRUCTURED_OUTPUT_INVALID",):
+            if not _is_output_problem(e.error):
                 raise
             diags = [f"model output was not a valid SceneDraft: {e.error.message}"]
             draft = None
@@ -188,6 +205,11 @@ async def generate_scene(request: SceneTask, runtime: Any) -> SceneBuild:
     task = request
     _check_task(task)
     client = RenderWorkerClient.from_runtime(runtime)
+    # Recorded so a later preview repair of this operation keeps the user's correction.
+    await runtime.write_json(f"{operation_dir(task)}/task.json", {
+        "edit_instruction": task.edit_instruction,
+        "previous_source": task.previous_build.source.key if task.previous_build else None,
+    })
     if runtime.mock_mode:
         source, summary = _mock_source(task)
         dir_key = attempt_dir(task, 0)
@@ -213,6 +235,9 @@ async def render_preview(request: PreviewRequest, runtime: Any) -> ScenePreviewO
         await runtime.report_progress(project_id=request.project_id, job_id=op, stage="scene_preview", progress=p, scene_id=slot.scene_id)
 
     task = SceneTask(project_id=request.project_id, job_id=op, context=request.context, slot=slot, revision=build.revision)
+    recorded = runtime.path(f"{operation_dir(task)}/task.json")
+    if recorded.exists():
+        task = task.model_copy(update={"edit_instruction": json.loads(recorded.read_text()).get("edit_instruction")})
     while True:
         result = await client.run(request.model_copy(update={"job_id": worker_job_id(op, build), "build": build}), progress)
         if result.status == "completed":
