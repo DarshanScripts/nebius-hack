@@ -1,0 +1,12 @@
+{
+  "summary": "MOCK fixture summary: a call is set up by signaling, audio travels as encrypted compressed packets, relays help when direct paths fail, and apps adapt to bad networks.",
+  "claims": [
+    {"claim_id": "c001", "text": "MOCK demonstration claim: a signaling exchange sets up a call before audio flows.", "source_ids": ["src001"], "evidence_type": "general_industry_practice", "caveat": null},
+    {"claim_id": "c002", "text": "MOCK demonstration claim: voice is compressed by a codec and sent as small packets.", "source_ids": ["src001"], "evidence_type": "general_industry_practice", "caveat": null},
+    {"claim_id": "c003", "text": "MOCK demonstration claim: call audio is end-to-end encrypted, so relays cannot read it.", "source_ids": ["src002"], "evidence_type": "documented", "caveat": null},
+    {"claim_id": "c004", "text": "MOCK demonstration claim: relay servers forward packets when a direct path is blocked.", "source_ids": ["src001", "src002"], "evidence_type": "general_industry_practice", "caveat": null},
+    {"claim_id": "c005", "text": "MOCK demonstration claim: apps lower bitrate and conceal packet loss on poor networks.", "source_ids": ["src001"], "evidence_type": "general_industry_practice", "caveat": null},
+    {"claim_id": "c006", "text": "MOCK demonstration claim: exact codecs, regions and vendors are not publicly documented.", "source_ids": ["src001", "src002"], "evidence_type": "inference", "caveat": "Fixture inference only; proprietary details are unknown."}
+  ],
+  "uncertainties": ["MOCK: exact codec, server topology, regions and vendors are not documented in this fixture."]
+}

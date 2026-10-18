@@ -1,0 +1,89 @@
+{
+  "title": "MOCK: How a WhatsApp call travels",
+  "turns": [
+    {
+      "speaker_id": "sundar",
+      "intent": "hook",
+      "claim_ids": [],
+      "text": "Every WhatsApp call feels instant. What really happens when you tap call?"
+    },
+    {
+      "speaker_id": "jensen",
+      "intent": "answer",
+      "claim_ids": [
+        "c001"
+      ],
+      "text": "First comes signaling. Both phones exchange small setup messages and agree to talk."
+    },
+    {
+      "speaker_id": "sundar",
+      "intent": "question",
+      "claim_ids": [],
+      "text": "Fine, but my voice is not a text message. How does sound travel?"
+    },
+    {
+      "speaker_id": "jensen",
+      "intent": "answer",
+      "claim_ids": [
+        "c002"
+      ],
+      "text": "A codec compresses your voice and chops it into tiny packets."
+    },
+    {
+      "speaker_id": "sundar",
+      "intent": "question",
+      "claim_ids": [],
+      "text": "So who can listen to those packets?"
+    },
+    {
+      "speaker_id": "jensen",
+      "intent": "answer",
+      "claim_ids": [
+        "c003"
+      ],
+      "text": "They are end to end encrypted, so even relay servers cannot read them."
+    },
+    {
+      "speaker_id": "sundar",
+      "intent": "challenge",
+      "claim_ids": [],
+      "text": "Relay servers? I thought calls went straight from phone to phone."
+    },
+    {
+      "speaker_id": "jensen",
+      "intent": "answer",
+      "claim_ids": [
+        "c004"
+      ],
+      "text": "Sometimes they do. When a network blocks that path, a relay forwards the encrypted packets."
+    },
+    {
+      "speaker_id": "sundar",
+      "intent": "question",
+      "claim_ids": [],
+      "text": "What happens when my connection gets worse mid call?"
+    },
+    {
+      "speaker_id": "jensen",
+      "intent": "answer",
+      "claim_ids": [
+        "c005"
+      ],
+      "text": "The app adapts. It lowers the bitrate and smooths over lost packets."
+    },
+    {
+      "speaker_id": "sundar",
+      "intent": "question",
+      "claim_ids": [],
+      "text": "So what should people remember?"
+    },
+    {
+      "speaker_id": "jensen",
+      "intent": "takeaway",
+      "claim_ids": [
+        "c006"
+      ],
+      "text": "Signaling, encrypted packets, and smart adaptation. The exact infrastructure details stay private."
+    }
+  ]
+}
