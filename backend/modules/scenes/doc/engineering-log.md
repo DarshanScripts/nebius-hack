@@ -60,3 +60,35 @@ step.
 `output/demos/scenes-live/demo-report-20261018-1440.json` (live, failed 403). Bad-source probe:
 three hand-written sources (forbidden imports/hooks/timers/network/URLs/img; syntax error;
 type error) — all rejected with line-numbered diagnostics.
+
+## 2026-10-18 — review against plan.md sections 7, 8, 9, 12
+
+Reviewed commit c433921 item by item. Defects found by probing with inputs not in the tests:
+
+- **Edit router false positives/negatives (real bug).** The global-edit blocklist matched bare
+  words, so in a voice-calling reel "scene 3: make the audio packets bigger", "make the arrow
+  longer", "labels shorter", "timing of the packets", "voice path" were all rejected (5 of 8
+  legitimate edits), while "change what Jensen says in scene 5" and "move Jensen to the left"
+  were accepted. Cause: one keyword list stood in for "changes a locked layer". Fixed with
+  context patterns per locked layer (several scenes, soundtrack, spoken words/captions, scene
+  length, character layer, theme/title); a fresh batch of phrasings not used while writing the
+  patterns found one more miss ("scene 5 should be shorter"), fixed. Still heuristic; live mode
+  has the model as a second filter for unsupported requests.
+- **Structured-output error coupling.** Only my fixture runtime's code `STRUCTURED_OUTPUT_INVALID`
+  counted as a repairable model-output failure; core's runtime may use another code and would
+  then skip repair and fallback. Now classified by code markers (transport markers win).
+- **Agent brief narrower than plan 8.1** (no research summary/sources/report, other scenes'
+  images, timeline, theme). Added, report excerpt capped at 6000 characters.
+- **36 px label rule unenforced** for raw `fontSize` in generated code. Validator now rejects
+  literal sizes below 36.
+- **Character PNG path never rendered** (fixtures had no images). Added MOCK transparent RGBA
+  character PNGs (`--character-pngs`) and inspected the rendered reel.
+- **Preview repair lost the edit instruction** (PreviewRequest carries none). generate_scene
+  records `task.json` per operation; render_preview reads it. Test proven by disabling the fix.
+
+Failed along the way: re-running the demo with `--character-pngs` into the existing output dir
+stopped on `refusing to overwrite immutable artifact .../context.json` — the immutability guard
+working as designed (same project id, different context). Variants use separate `--output` dirs.
+
+Process gap, not fixable retroactively: the work was committed in three commits at the end rather
+than as early milestones.

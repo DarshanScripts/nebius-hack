@@ -18,17 +18,19 @@ scene id with the **operation** id, or `final` with no scene id).
 
 | Behaviour | Where |
 | --- | --- |
-| Target scene decided deterministically ("scene six", "scene 6", "s06", "sixth scene", selected id). Multi-scene, global, audio/dialogue/timing/caption/character edits → `unsupported` with a reason. Live mode: Nemotron structured output may refine the instruction or flag unsupported, never retarget. | `router.py` |
+| Target scene decided deterministically ("scene six", "scene 6", "s06", "sixth scene", selected id). Requests that change a locked layer (several scenes, the soundtrack, spoken words/captions, scene length, the character layer, theme/title) → `unsupported` with a reason. Words are matched in context, so diagram edits such as "voice packets", "a longer arrow" or "animation timing" stay editable. Pattern-based: tested on 21 editable and 19 locked-layer phrasings (plus 4 targeting errors), not exhaustive. Live mode: Nemotron structured output may refine the instruction or flag unsupported, never retarget. | `router.py` |
 | Mock mode: deterministic fixture source per scene (`fixtures/scenes/sNN.tsx`, edits use `sNN_edit.tsx` or the fallback template), `generation_mode="mock"`, still validated by the worker. | `service.py` |
 | Live mode: one isolated agent invocation per scene. `NEMOTRON_STRUCTURED_MODE=tool_calling` → LangChain `create_agent(runtime.llm, tools=[read_scene_context, read_previous_source, validate_scene_source], response_format=ToolStrategy(SceneDraft))`; `json_prompt` → `runtime.structured(schema=SceneDraft)`. | `agent.py` |
-| Generate → worker `/validate` → repair with diagnostics, **max 2 corrective attempts total across validation and preview** (`SceneBuild.repair_attempts`), then the deterministic fallback template (`generation_mode="fallback"`, `warnings[0]` starts `FALLBACK:`). Model transport/auth errors are a retryable `SCENE_AGENT_UNAVAILABLE` stage error, never a silent fallback. | `service.py` |
+| Generate → worker `/validate` → repair with diagnostics, **max 2 corrective attempts total across validation and preview** (`SceneBuild.repair_attempts`), then the deterministic fallback template (`generation_mode="fallback"`, `warnings[0]` starts `FALLBACK:`). Model transport/auth errors are a retryable `SCENE_AGENT_UNAVAILABLE` stage error, never a silent fallback. A `StageFailure` from `runtime.structured` counts as a repair attempt when its code names an output problem (`INVALID`/`SCHEMA`/`PARSE`/`VALIDATION`/`STRUCTURED`/`JSON`, and none of `UNAVAILABLE`/`TIMEOUT`/`AUTH`/`RATE`/…); otherwise it is re-raised. **Member 1:** please keep core's invalid-output code within that vocabulary. A preview repair of an edit keeps the user's instruction (read from the operation's `task.json`). | `service.py` |
 | Cue frames that name word ids are recomputed from the measured words (LLM cannot move timing); unknown word/claim ids, duplicates and out-of-range untimed cues are repair diagnostics. | `timing.py` |
 | Worker job id `<operation_id>-a<repair_attempts>` (fallback: `<operation_id>-afb`), preserved in the returned `RenderResult`. | `service.worker_job_id` |
+| Agent brief: topic, all 12 turns (own turns with scene-local word frames), research summary + report excerpt + sources + claims + uncertainties, own and other scenes' image choices, the six-slot timeline, theme. | `agent.scene_brief` |
 | Shared authoring context for every agent (theme, coordinates, kit API, timing/boundary rules, import allowlist, working example — the example is compiled by the test suite). | `scene_authoring.md` |
 
 Artifacts (all immutable, relative keys):
 
 ```text
+projects/<id>/scenes/<sid>/v<rev>/<operation_id>/task.json                     # edit instruction for this operation
 projects/<id>/scenes/<sid>/v<rev>/<operation_id>/a<n>/{Scene.tsx,validation.json,build.json,preview.mp4,poster.jpg,render-job.json}
 projects/<id>/scenes/<sid>/v<rev>/<operation_id>/a<n>/candidates/NN/Scene.tsx   # tool_calling validate calls
 projects/<id>/scenes/<sid>/v<rev>/<operation_id>/afb/...                         # fallback build
@@ -67,8 +69,9 @@ boundary envelope. Generated scenes only draw inside the 936×816 content box.
 
 Generated-source policy (`src/source-check.ts`): imports only `react`, `remotion` (allowlisted
 helpers) and `./scene-kit`; no state/effect hooks, timers, `Date`, `Math.random`, network,
-globals, `process`, raw `<img>/<video>/<audio>/<iframe>/<image>/<use>`, URL strings or CSS `url()`;
-default-exported component; strict TypeScript.
+globals, `process`, raw `<img>/<video>/<audio>/<iframe>/<image>/<use>`, URL strings or CSS `url()`,
+literal `fontSize` below 36; default-exported component; strict TypeScript. (Computed font sizes
+cannot be checked statically.)
 
 ## Setup and commands
 
@@ -87,6 +90,9 @@ npm test --prefix renderer && npm run typecheck --prefix renderer
 
 # full fixture acceptance: starts its own worker on :8011 with ARTIFACT_ROOT=--output
 .venv/bin/python -m backend.modules.scenes.demo --mock --output output/demos/scenes
+# same, with MOCK transparent character PNGs instead of silhouettes. Use a separate --output:
+# artifacts are immutable, so a different fixture variant in the same project namespace is refused.
+.venv/bin/python -m backend.modules.scenes.demo --mock --character-pngs --output output/demos/scenes-png
 
 # worker alone (what compose runs); relative ARTIFACT_ROOT resolves against the repo root
 ARTIFACT_ROOT=./output RENDER_WORKER_TOKEN=<secret> npm run worker --prefix renderer
@@ -108,7 +114,8 @@ volume at `/workspace/output`, pass `RENDER_WORKER_TOKEN`, `RENDER_CONCURRENCY`,
 
 ## Acceptance results (2026-10-18, laptop, mock mode, real Remotion renders)
 
-Run `demo-report-20261018-1437.json` (`--mock`, 2 min 35 s total):
+Snapshot: code as committed after the review fixes. Run `output/demos/scenes-png/demo-report-20261018-1453.json`
+(`--mock --character-pngs`, 2 min 35 s). Every row below was measured on this run's artefacts.
 
 | Check | Result |
 | --- | --- |
@@ -117,11 +124,15 @@ Run `demo-report-20261018-1437.json` (`--mock`, 2 min 35 s total):
 | Route "Please correct scene six: make the packet diagram clearer" | `edit_scene`, `s06` |
 | Edit s06 rev 1 → 2 | s06 source hash changed; s01–s05 source hashes unchanged; timeline hash unchanged; preview 447 frames |
 | Repair loop → fallback (canned broken model, `json_prompt` path) | 3 drafts (a0,a1,a2) rejected by the real validator, fallback `afb`, `repair_attempts=2`, `FALLBACK:` warning, preview rendered |
-| Final master | 1800 frames, 1080×1920, 30/1, h264 `yuv420p`, aac 48 kHz, 60.01 s, 43 s render |
-| Audio at joins | silent before first utterance (0.0 s), speech at 1.0 s, silent in the 8.9 s scene gap, silent after 53.7 s |
-| Boundary s05→s06 (frames 1340/1353/1365/1380, PNGs next to the reel) | inspected: s05 content until its fade, empty board at the cut, s06 fading in; characters/captions follow global turns across the cut |
-| Python tests | 30 passed |
-| Renderer tests / typecheck | 8 passed (incl. full-range file rejected by the output check) / clean |
+| Final master `final-20261018-1453/reel.mp4` | 1800 frames, 1080×1920, 30/1, h264 `yuv420p`, aac 48 kHz, 60.01 s, 39.5 s render |
+| Audio at joins | silent at 0.0 s (before first utterance), speech at 1.0 s, silent at 8.9 s (scene gap), speech at 17 s / 50 s, silent at 55 s (after 53.7 s) |
+| Character PNGs + boundary (frames 130/138/1340/1353/1366/1500) | inspected: transparent cut-outs over the dot grid, clipped to the bottom region; Sundar slides out / Jensen in at a turn change; s05 board until its fade, empty board at the 1353 cut, s06 fading in; captions follow global turns |
+| Python tests | 70 passed |
+| Renderer tests / typecheck | 8 passed with `OLD_REEL` set (7 + 1 skipped without it; that test proves a full-range file is rejected) / clean |
+
+The silhouette-placeholder variant (no PNGs) was rendered and inspected in run
+`output/demos/scenes/demo-report-20261018-1437.json` (before the review fixes; same render code
+path except the character image branch).
 
 Bad-source probe (`/tmp` files, see engineering log): every policy class and TS errors reported
 with line numbers; syntax errors reported.
@@ -138,7 +149,8 @@ with line numbers; syntax errors reported.
   Nemotron; it depends on member 1's capability check.
 - Docker image not built yet (downloads several hundred MB: base image, npm deps, Chrome
   Headless Shell). Cloud rendering on the Nebius VM is member 1's deployment step.
-- Real character PNGs absent: placeholders (labelled silhouettes) render instead.
+- Real character PNGs not in the repo yet; the image path is exercised with MOCK transparent PNGs
+  (`--character-pngs`), the silhouette placeholder when absent.
 - `context_hash` is not recomputed by the worker (it checks build hashes == context fields);
   member 1's `contracts/validation.py` owns canonical hashing.
 
