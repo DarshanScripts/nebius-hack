@@ -27,6 +27,7 @@ const FORBIDDEN_GLOBALS = new Set([
   'crypto', 'Image', 'Audio', 'FontFace', 'module', 'exports', '__dirname', '__filename',
 ]);
 const FORBIDDEN_JSX = new Set(['img', 'video', 'audio', 'iframe', 'script', 'link', 'object', 'embed', 'image', 'foreignObject', 'style', 'source', 'track', 'use']);
+const MIN_FONT_PX = 36;
 const URLISH = /^\s*(https?:|file:|ftp:|wss?:|\/\/|blob:)/i;
 
 const at = (sf: ts.SourceFile, node: ts.Node): string => {
@@ -82,6 +83,12 @@ export const staticCheck = (source: string): string[] => {
       for (const attr of node.attributes.properties) {
         if (ts.isJsxAttribute(attr) && attr.name.getText(sf) === 'dangerouslySetInnerHTML') out.push(`${at(sf, attr)} dangerouslySetInnerHTML is not allowed`);
       }
+    } else if ((ts.isPropertyAssignment(node) || ts.isJsxAttribute(node)) && ['fontSize', 'font-size'].includes(node.name.getText(sf).replace(/['"]/g, ''))) {
+      // Theme rule: board text >= 36 px. Only literal sizes are checkable statically.
+      let init: ts.Node | undefined = node.initializer;
+      if (init && ts.isJsxExpression(init)) init = init.expression;
+      const value = init && (ts.isNumericLiteral(init) || ts.isStringLiteral(init)) ? parseFloat(init.text) : NaN;
+      if (!Number.isNaN(value) && value < MIN_FONT_PX) out.push(`${at(sf, node)} fontSize ${value} is below the ${MIN_FONT_PX}px minimum for board text`);
     } else if (ts.isStringLiteralLike(node) || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) {
       const text = node.text;
       if (URLISH.test(text) || /url\s*\(/i.test(text) || /@import/i.test(text)) out.push(`${at(sf, node)} external URL / CSS url() strings are not allowed`);

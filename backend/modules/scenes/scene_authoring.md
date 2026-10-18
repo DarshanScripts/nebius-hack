@@ -44,7 +44,7 @@ audio with measured words, and the timeline. `cues` are the cues you submit with
 - No `<img>`, `<video>`, `<audio>`, `<iframe>`, `<image>`, `<use>`, `<style>`; no URL strings
   (`http:`, `//`, `file:`), no CSS `url(...)`. Use `SceneImage` for the scene's research image.
 - `export default` a function component. TypeScript strict mode must pass.
-- Text size at least **36 px** (the kit's `Label` and `Box` enforce this). Font: DejaVu Sans
+- Text size at least **36 px**: the kit's `Label` and `Box` enforce it, and the validator rejects any literal `fontSize` below 36. Font: DejaVu Sans
   (`FONT`). Keep every element inside 0 ≤ x < 936, 0 ≤ y < 816.
 
 ## Theme

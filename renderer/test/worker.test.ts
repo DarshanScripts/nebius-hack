@@ -47,12 +47,15 @@ test('staticCheck accepts kit usage and rejects escapes', () => {
     [`export * from './scene-kit';`, /re-export/],
     [`import {OffthreadVideo} from 'remotion';`, /OffthreadVideo/],
     [`const k = globalThis['process'];`, /globalThis/],
+    [`const f = <div style={{fontSize: 18}} />;`, /below the 36px/],
+    [`const g = <text fontSize="24" />;`, /below the 36px/],
   ];
   for (const [line, re] of cases) {
     const src = `import React from 'react';\n${line}\nexport default function Scene() { return null; }\n`;
     assert.match(staticCheck(src).join('\n'), re, line);
   }
   assert.match(staticCheck(`export function Scene() { return null; }`).join(), /default/);
+  assert.deepEqual(staticCheck(`import React from 'react';\nexport default function Scene() { return <div style={{fontSize: 40}} />; }\n`), []);
 });
 
 const turn = (speaker: 'sundar' | 'jensen', start: number, end: number, words: string[]): TimedTurn => ({
