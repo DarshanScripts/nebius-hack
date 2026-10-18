@@ -9,9 +9,18 @@ const api: EditorApi = isFrontendMock ? mockApi : liveApi
 const selectionKey = `nebius-selected-project-${isFrontendMock ? 'frontend-mock' : 'api'}`
 const names = { sundar: 'Sundar Pichai', jensen: 'Jensen Huang' }
 const stageLabels: Record<string, string> = { created: 'Starting', researching: 'Researching', scripting: 'Writing dialogue', finding_images: 'Finding visuals', voicing: 'Creating voice', planning: 'Planning timeline', generating_scenes: 'Generating scenes', ready: 'Ready to stitch', rendering: 'Rendering final', completed: 'Complete', failed: 'Needs attention' }
-const retryStage = (snapshot: ProjectSnapshot): RetryStage => ({ research: 'research', scripting: 'dialogue', finding_images: 'images', voicing: 'voice', generating_scenes: 'scenes', rendering: 'final' } as Partial<Record<string, RetryStage>>)[snapshot.status] || 'research'
+const retryStage = (snapshot: ProjectSnapshot): RetryStage => {
+  if (snapshot.final?.status === 'failed') return 'final'
+  if (snapshot.timeline && snapshot.error?.scene_id) return 'scenes'
+  if (!snapshot.research) return 'research'
+  if (!snapshot.script) return 'dialogue'
+  if (!snapshot.images) return 'images'
+  if (!snapshot.audio) return 'voice'
+  return 'scenes'
+}
 const messageOf = (error: unknown) => error instanceof ApiError ? error.status === 409 ? `${error.message} Refreshing project state…` : error.message : error instanceof Error ? error.message : 'Something went wrong'
 const time = (date: string) => new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+const isActive = (project: ProjectSnapshot) => Boolean(project.active_job_id || project.scenes.some(scene => scene.active_job_id) || project.final?.status === 'queued' || project.final?.status === 'running')
 
 export function App() {
   const [projects, setProjects] = useState<ProjectSummary[]>([])
@@ -29,16 +38,18 @@ export function App() {
   const [mobileTab, setMobileTab] = useState<'activity' | 'scenes'>('activity')
   const cursor = useRef(0)
   const generation = useRef(0)
-  const polling = useRef(false)
+  const inFlight = useRef<number | null>(null)
+  const nextPollAt = useRef(0)
 
   const refreshList = useCallback(async () => setProjects(await api.listProjects()), [])
   const refresh = useCallback(async (id: string, requestGeneration: number) => {
-    if (polling.current) return
-    polling.current = true
+    if (inFlight.current === requestGeneration) return
+    inFlight.current = requestGeneration
     try {
       const [nextSnapshot, page] = await Promise.all([api.getProject(id), api.getEvents(id, cursor.current)])
       if (generation.current !== requestGeneration) return
       setSnapshot(nextSnapshot)
+      nextPollAt.current = Date.now() + (isActive(nextSnapshot) ? 1000 : 5000)
       setProjects(previous => previous.map(item => item.project_id === id ? { ...item, status: nextSnapshot.status, updated_at: nextSnapshot.updated_at } : item))
       cursor.current = page.next_after
       setEvents(previous => {
@@ -46,14 +57,14 @@ export function App() {
         page.events.forEach(item => byId.set(item.event_id, item))
         return [...byId.values()].sort((a, b) => a.event_id - b.event_id)
       })
-      setError('')
-    } catch (reason) { if (generation.current === requestGeneration) setError(messageOf(reason)) }
-    finally { polling.current = false; if (generation.current === requestGeneration) setLoading(false) }
+    } catch (reason) { if (generation.current === requestGeneration) { setError(messageOf(reason)); nextPollAt.current = Date.now() + 5000 } }
+    finally { if (inFlight.current === requestGeneration) inFlight.current = null; if (generation.current === requestGeneration) setLoading(false) }
   }, [])
 
   useEffect(() => { refreshList().catch(reason => { setError(messageOf(reason)); setLoading(false) }) }, [refreshList])
   useEffect(() => {
     const current = ++generation.current
+    nextPollAt.current = 0
     cursor.current = 0
     setEvents([])
     setSnapshot(null)
@@ -61,43 +72,48 @@ export function App() {
     if (!projectId) { localStorage.removeItem(selectionKey); return }
     localStorage.setItem(selectionKey, projectId)
     void refresh(projectId, current)
-    const timer = window.setInterval(() => { void refresh(projectId, current) }, 1000)
+    const timer = window.setInterval(() => { if (Date.now() >= nextPollAt.current) void refresh(projectId, current) }, 1000)
     return () => window.clearInterval(timer)
   }, [projectId, refresh])
 
   const applyResponse = (next: ProjectSnapshot) => {
     setSnapshot(next)
+    nextPollAt.current = 0
     if (projectId !== next.project_id) setProjectId(next.project_id)
     void refreshList()
   }
   const submitTopic = async (event: React.FormEvent) => {
     event.preventDefault(); setBusy(true); setError('')
-    try { applyResponse(await api.createProject({ topic: topic.trim(), language: 'en' })) }
-    catch (reason) { setError(messageOf(reason)) }
+    const requestGeneration = generation.current
+    try { const next = await api.createProject({ topic: topic.trim(), language: 'en' }); if (generation.current === requestGeneration) applyResponse(next) }
+    catch (reason) { if (generation.current === requestGeneration) setError(messageOf(reason)) }
     finally { setBusy(false) }
   }
   const submitEdit = async (event: React.FormEvent) => {
     event.preventDefault(); if (!snapshot || !message.trim()) return
     setBusy(true); setError('')
+    const requestGeneration = generation.current
     try {
       const scene = snapshot.scenes.find(item => item.scene_id === selectedScene)
       const next = await api.editProject(snapshot.project_id, { message: message.trim(), ...(scene ? { scene_id: scene.scene_id, expected_scene_revision: scene.current_revision } : {}) })
-      applyResponse(next); setMessage('')
-    } catch (reason) { setError(messageOf(reason)); if (reason instanceof ApiError && reason.status === 409) void refresh(snapshot.project_id, generation.current) }
+      if (generation.current === requestGeneration) { applyResponse(next); setMessage('') }
+    } catch (reason) { if (generation.current === requestGeneration) { setError(messageOf(reason)); if (reason instanceof ApiError && reason.status === 409) void refresh(snapshot.project_id, requestGeneration) } }
     finally { setBusy(false) }
   }
   const stitch = async () => {
     if (!snapshot) return
     setBusy(true); setError('')
-    try { applyResponse(await api.stitchProject(snapshot.project_id)) }
-    catch (reason) { setError(messageOf(reason)); if (reason instanceof ApiError && reason.status === 409) void refresh(snapshot.project_id, generation.current) }
+    const requestGeneration = generation.current
+    try { const next = await api.stitchProject(snapshot.project_id); if (generation.current === requestGeneration) applyResponse(next) }
+    catch (reason) { if (generation.current === requestGeneration) { setError(messageOf(reason)); if (reason instanceof ApiError && reason.status === 409) void refresh(snapshot.project_id, requestGeneration) } }
     finally { setBusy(false) }
   }
   const retry = async (stage: RetryStage, sceneId?: string) => {
     if (!snapshot) return
     setBusy(true); setError('')
-    try { applyResponse(await api.retryProject(snapshot.project_id, stage, sceneId)) }
-    catch (reason) { setError(messageOf(reason)) }
+    const requestGeneration = generation.current
+    try { const next = await api.retryProject(snapshot.project_id, stage, sceneId); if (generation.current === requestGeneration) applyResponse(next) }
+    catch (reason) { if (generation.current === requestGeneration) setError(messageOf(reason)) }
     finally { setBusy(false) }
   }
   const allReady = Boolean(snapshot?.timeline && snapshot.scenes.length === 6 && snapshot.scenes.every(scene => scene.status === 'ready' && scene.preview?.status === 'completed' && scene.active_job_id === null))
@@ -123,7 +139,7 @@ export function App() {
             {snapshot.script && <div className="dialogue-section"><div className="subheading"><span className="eyebrow">THE CONVERSATION</span><h3>{snapshot.script.title}</h3><p>12 turns · Sundar & Jensen</p></div>{snapshot.script.turns.slice().sort((a,b) => a.order-b.order).map(turn => { const audio = snapshot.audio?.utterances.find(item => item.dialogue_id === turn.dialogue_id); return <div className="dialogue-card" key={turn.dialogue_id}><div className={`avatar ${turn.speaker_id}`}>{turn.speaker_id === 'sundar' ? 'S' : 'J'}</div><div className="dialogue-copy"><div className="dialogue-meta"><strong>{names[turn.speaker_id]}</strong><span>SCENE {turn.scene_index} · {turn.dialogue_id}</span></div><p>{turn.text}</p>{audio && <details className="audio-details"><summary>Audio & word timing <span>{(audio.duration_ms/1000).toFixed(1)}s · {audio.words.length} words · {audio.timing_quality}</span></summary><audio controls preload="none" src={api.artifactUrl(audio.wav)} aria-label={`${names[turn.speaker_id]} audio ${turn.dialogue_id}`} /><div className="word-list">{audio.words.map(word => <span key={word.word_id} title={`${word.start_ms}–${word.end_ms} ms`}>{word.text}<small>{(word.start_ms/1000).toFixed(1)}s</small></span>)}</div><p className="transcript">Transcript: {audio.transcript}</p></details>}</div></div> })}</div>}
           </div><form className="composer" onSubmit={submitEdit}><div className="composer-target">{selected ? <>Editing <strong>Scene {selected.index}</strong> · revision {selected.current_revision}</> : 'Select a scene to target an edit, or name it in your message.'}{selectedScene && <button type="button" onClick={() => setSelectedScene(null)}>Clear selection</button>}</div><div className="composer-input"><textarea aria-label="Scene correction" value={message} onChange={event => setMessage(event.target.value)} placeholder="Ask for a change to one scene…" rows={2} disabled={!snapshot.timeline || busy || snapshot.status === 'rendering'} /><button type="submit" className="send-button" disabled={!snapshot.timeline || busy || !message.trim() || snapshot.status === 'rendering'} aria-label="Send correction">↗</button></div></form></section>
         <section className={`scenes-pane ${mobileTab === 'scenes' ? 'mobile-active' : ''}`}><div className="section-heading scenes-heading"><div><span className="eyebrow">VISUAL STORYBOARD</span><h2>Scenes <span>06</span></h2></div><span className="ready-count">{snapshot.scenes.filter(scene => scene.status === 'ready').length}/6 ready</span></div><div className="scenes-scroll">{snapshot.scenes.slice().sort((a,b) => a.index-b.index).map(scene => <SceneCard key={scene.scene_id} scene={scene} selected={selectedScene === scene.scene_id} onSelect={() => { setSelectedScene(scene.scene_id); setMobileTab('activity') }} onRetry={() => void retry('scenes', scene.scene_id)} busy={busy} api={api} />)}</div><div className="stitch-panel"><div className="stitch-copy"><strong>Final reel</strong><span>{snapshot.final_is_stale ? 'Your reel needs a new stitch after this edit.' : snapshot.final?.status === 'completed' ? isFrontendMock ? 'Mock placeholder video is ready.' : 'Your 60-second reel is ready.' : 'Combine all six scenes into one video.'}</span></div>{snapshot.final?.status === 'running' && <div className="render-progress"><div style={{ width: `${Math.round(snapshot.final.progress * 100)}%` }} /><span>Rendering {Math.round(snapshot.final.progress * 100)}%</span></div>}{snapshot.final?.status === 'completed' && snapshot.final.video && !snapshot.final_is_stale && <a className="download-button" href={api.artifactUrl(snapshot.final.video)} download="nebius-reel.mp4">↓ Download MP4</a>}{snapshot.final?.status === 'failed' && <p className="mini-error">{snapshot.final.error?.message}</p>}<button className="primary-button stitch-button" disabled={!canStitch} onClick={() => void stitch()}>{snapshot.final_is_stale ? 'Stitch latest scenes' : snapshot.final?.status === 'completed' ? 'Stitched' : snapshot.status === 'rendering' ? 'Rendering…' : 'Stitch reel'} <span>✦</span></button></div></section></div>
-        {snapshot.error && <div className="floating-failure"><span>{snapshot.error.message}</span>{snapshot.error.retryable && <button onClick={() => void retry(retryStage(snapshot))}>Retry stage</button>}</div>}
+        {snapshot.error && <div className="floating-failure"><span>{snapshot.error.message}</span>{snapshot.error.retryable && <button onClick={() => { const stage = retryStage(snapshot); void retry(stage, stage === 'scenes' ? snapshot.error?.scene_id || undefined : undefined) }}>Retry stage</button>}</div>}
       </> : <div className="center-state">Project unavailable. Choose another reel or create a new one.</div>}
     </main>
   </div>

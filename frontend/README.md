@@ -18,7 +18,7 @@ npm run build
 npm run preview
 ```
 
-The standalone mock lives in `src/api/mock.ts`. It uses the same `EditorApi` interface as `src/api/client.ts`, persists projects in browser local storage, publishes delayed research/dialogue/audio/timeline states, and completes previews in order `s03, s01, s06, s02, s05, s04`. The six slots remain ordered. Its local MP4 is a short, silent placeholder, and its WAV is silent. Both are visibly marked mock; they do not demonstrate real rendering or Chatterbox/WhisperX output. The browser player gets audio only from the preview MP4, never a second simultaneous stream.
+The standalone mock lives in `src/api/mock.ts`. It uses the same `EditorApi` interface as `src/api/client.ts`, persists projects in browser local storage, publishes delayed research/dialogue/images/audio/timeline states, and completes previews in order `s03, s01, s06, s02, s05, s04`. The six slots remain ordered. Its local MP4 is a two-second, silent placeholder, and its WAV is silent. Both are visibly marked mock; they do not demonstrate real rendering or Chatterbox/WhisperX output. The browser player gets audio only from the preview MP4, never a second simultaneous stream. The mock timeline uses the required frame gaps and scene boundaries `[0,273,543,813,1083,1353,1800]`.
 
 ## Reproduce the acceptance flow
 
@@ -38,12 +38,12 @@ Set `SMOKE_URL` to another frontend origin or `SMOKE_BROWSER` to a Playwright Ch
 
 ## Checks performed
 
-On 2026-10-18, `npm run build` passed TypeScript and Vite production compilation. `npm run smoke` passed in headless Microsoft Edge and reported:
+On 2026-10-18, a clean `npm ci` and `npm run build` passed TypeScript and Vite production compilation. `npm run smoke` passed against the built preview in headless Microsoft Edge and reported:
 
 ```json
-{"slots":[1,2,3,4,5,6],"completion_order":[3,1,6,2,5,4],"scene_6_revision":2,"other_preview_urls_unchanged":true,"stitch_download":true,"refresh_restored":true,"api_requests":0}
+{"slots":[1,2,3,4,5,6],"completion_order":[3,1,6,2,5,4],"scene_6_revision":2,"other_preview_urls_unchanged":true,"stitch_download":true,"refresh_restored":true,"mobile_navigation":true,"api_requests":0}
 ```
 
 ## Integration boundary
 
-The live API wrapper covers project list/create/read, cursor events, edit, retry, Stitch, and encoded artifact URLs. Live backend integration and real MP4/audio acceptance remain for member 1's merged deployment. The UI expects the exact snake_case fields and revision lifecycle from `plan.md`; no shared contract change is requested. The selected NVIDIA Nemotron endpoint is server configuration and is never called or configured in the browser.
+The live API wrapper covers project list/create/read, cursor events, edit, retry, Stitch, and encoded artifact URLs. Its routes and request bodies were compared with `origin/feat/m1-platform` on 2026-10-18. That platform branch is not yet merged into `main`; a real backend round trip, persistence across an API restart, and real MP4/audio acceptance remain for integration. The UI expects the exact snake_case fields and revision lifecycle from `plan.md`; no shared contract change is requested. The selected NVIDIA Nemotron endpoint is server configuration and is never called or configured in the browser.

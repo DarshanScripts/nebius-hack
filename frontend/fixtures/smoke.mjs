@@ -40,5 +40,11 @@ try {
   assert.equal(await scenes.count(), 6)
   assert.deepEqual(apiRequests, [])
   await page.screenshot({ path: '.artifacts/stitched.png' })
-  console.log(JSON.stringify({ slots: [1, 2, 3, 4, 5, 6], completion_order: [3, 1, 6, 2, 5, 4], scene_6_revision: 2, other_preview_urls_unchanged: true, stitch_download: true, refresh_restored: true, api_requests: apiRequests.length }))
+  await page.setViewportSize({ width: 390, height: 844 })
+  assert.ok(await page.locator('.topbar-badges').evaluate(element => element.getBoundingClientRect().right <= window.innerWidth))
+  await page.getByRole('button', { name: 'Scenes' }).click()
+  assert.equal(await scenes.count(), 6)
+  await page.getByRole('button', { name: 'New reel' }).click()
+  await page.getByRole('heading', { name: 'What should we explain?' }).waitFor()
+  console.log(JSON.stringify({ slots: [1, 2, 3, 4, 5, 6], completion_order: [3, 1, 6, 2, 5, 4], scene_6_revision: 2, other_preview_urls_unchanged: true, stitch_download: true, refresh_restored: true, mobile_navigation: true, api_requests: apiRequests.length }))
 } finally { await browser.close() }
