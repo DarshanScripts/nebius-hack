@@ -48,21 +48,38 @@ def match_words(expected: list[Token], got: list[WordTiming]) -> dict[int, WordT
     for tag, a0, a1, b0, b1 in matcher.get_opcodes():
         if tag == "equal":
             mapping.update({a0 + k: got[b0 + k] for k in range(a1 - a0)})
-        elif tag == "replace" and a1 - a0 == b1 - b0:
-            for k in range(a1 - a0):
-                if _similar(expected[a0 + k].norm, _norm(got[b0 + k].text)):
-                    mapping[a0 + k] = got[b0 + k]
+        elif tag == "replace":
+            j = b0
+            for i in range(a0, a1):
+                want, acc, k = expected[i].norm.replace("'", ""), "", j
+                while k < b1 and len(acc) < len(want):
+                    acc += _norm(got[k].text).replace("'", "")
+                    k += 1
+                if want and acc == want and k > j:
+                    mapping[i] = _merge(got[j:k])
+                    j = k
+                elif j < b1 and _similar(expected[i].norm, _norm(got[j].text)) and a1 - a0 == b1 - b0:
+                    mapping[i] = got[j]
+                    j += 1
     return mapping
+
+
+def _merge(parts: list[WordTiming]) -> WordTiming:
+    if len(parts) == 1:
+        return parts[0]
+    return WordTiming(
+        word_id=parts[0].word_id,
+        text=" ".join(p.text for p in parts),
+        start_ms=parts[0].start_ms,
+        end_ms=parts[-1].end_ms,
+    )
 
 
 def build_words(
     dialogue_id: str, transcript: str, got: list[WordTiming], duration_ms: int
-) -> tuple[list[WordTiming], list[WordTiming]]:
-    """Return (canonical words, provider words) after validating coverage and timing.
-
-    Canonical words carry the intended transcript text, contiguous IDs, ordered non-overlapping
-    clip-local millisecond times and fit inside the clip. Provider words are untouched.
-    """
+) -> list[WordTiming]:
+    """Validate coverage and timing; return words carrying the intended transcript text, contiguous
+    IDs, and ordered non-overlapping clip-local millisecond times that fit inside the clip."""
     tokens = tokenize(transcript)
     mapping = match_words(tokens, got)
     missing = [t.text for i, t in enumerate(tokens) if t.meaningful and i not in mapping]
@@ -95,7 +112,7 @@ def build_words(
         cursor = end
     if not words:
         raise fail("ALIGNMENT_INCOMPLETE", f"{dialogue_id}: transcript has no alignable words", retryable=True)
-    return words, got
+    return words
 
 
 def _ts(ms: int) -> str:

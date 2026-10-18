@@ -14,9 +14,8 @@ import shutil
 import sys
 from pathlib import Path
 
-from contracts.models import ArtifactRef, CharacterSpec, DialogueScript, StageFailure, VoiceRequest
+from contracts.models import CharacterSpec, DialogueScript, StageFailure, VoiceRequest
 
-from . import audio
 from .fake_runtime import FakeRuntime
 from .service import synthesize_dialogue
 from .validate import validate_bundle

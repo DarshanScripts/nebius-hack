@@ -78,6 +78,8 @@ class WhisperXClient:
         )
         try:
             payload = resp.json()
+            if isinstance(payload, dict) and payload.get("words") == []:
+                raise fail("ALIGNMENT_INCOMPLETE", f"{dialogue_id}: aligner returned no timed words", retryable=True)
             result = AlignmentResult.model_validate({k: payload[k] for k in AlignmentResult.model_fields})
         except (json.JSONDecodeError, KeyError, TypeError, ValidationError) as exc:
             raise fail("ALIGNMENT_BAD_RESPONSE", f"Alignment service response invalid: {exc}", retryable=True) from exc

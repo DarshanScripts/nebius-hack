@@ -1,0 +1,13 @@
+# WhisperX container dependencies (Python 3.11, linux/x86_64, NVIDIA Blackwell RTX PRO 6000).
+# whisperx 3.8.x pins torch~=2.8.0 / torchaudio~=2.8.0; the CUDA 12.8 builds include sm_120 kernels.
+--extra-index-url https://download.pytorch.org/whl/cu128
+
+whisperx==3.8.6
+torch==2.8.0+cu128
+torchaudio==2.8.0+cu128
+# whisperx.align uses pandas 2.x semantics (chained .loc assignment/groupby); stay below 3.
+pandas>=2.2.3,<3
+
+fastapi
+uvicorn[standard]
+python-multipart

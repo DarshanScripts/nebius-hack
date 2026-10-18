@@ -1,0 +1,27 @@
+# Chatterbox Turbo container dependencies (Python 3.11, linux/x86_64, NVIDIA Blackwell RTX PRO 6000).
+#
+# chatterbox-tts 0.1.7 pins torch==2.6.0, whose wheels have no sm_120 (Blackwell) kernels.
+# We therefore install torch 2.8.0 built for CUDA 12.8 from here and install chatterbox-tts
+# itself with --no-deps (see Dockerfile). Everything chatterbox imports is listed explicitly,
+# minus gradio (UI only, not needed by this service).
+--extra-index-url https://download.pytorch.org/whl/cu128
+
+torch==2.8.0+cu128
+torchaudio==2.8.0+cu128
+numpy>=1.24,<2
+librosa==0.11.0
+s3tokenizer
+transformers==5.2.0
+diffusers==0.29.0
+resemble-perth>=1.0.0
+conformer==0.3.2
+safetensors==0.5.3
+spacy-pkuseg
+pykakasi==2.3.0
+pyloudnorm
+omegaconf
+huggingface_hub
+
+fastapi
+uvicorn[standard]
+python-multipart

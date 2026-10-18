@@ -9,7 +9,6 @@ import numpy as np
 
 from contracts.models import (
     AlignmentResult,
-    ArtifactRef,
     AudioBundle,
     CharacterSpec,
     DialogueTurn,
@@ -19,7 +18,7 @@ from contracts.models import (
 )
 
 from . import audio, clients, mock
-from .config import MAX_SPEEDUP, SAMPLE_RATE, SAMPLES_PER_FRAME, SPEEDUP_STEP, VoiceSettings
+from .config import MAX_SPEEDUP, SAMPLE_RATE, SPEEDUP_STEP, VoiceSettings
 from .errors import fail
 from .text import build_srt, build_words, normalize_transcript, tokenize
 
@@ -140,7 +139,7 @@ def _validate_request(request: VoiceRequest) -> dict[str, CharacterSpec]:
             raise fail("VOICE_REQUEST_INVALID", f"Turn {i} must have order {i} and id d{i:03d}")
         if turn.speaker_id not in chars:
             raise fail("VOICE_REQUEST_INVALID", f"No character for speaker '{turn.speaker_id}'")
-        if not tokenize(turn.text):
+        if not any(t.meaningful for t in tokenize(turn.text)):
             raise fail("VOICE_REQUEST_INVALID", f"{turn.dialogue_id} has no speakable words")
     return chars
 
@@ -181,11 +180,11 @@ def _choose_speed(clips: list[Clip], budget: int) -> float:
     raise _over_budget(_total_frames(clips, MAX_SPEEDUP), budget)
 
 
-def _over_budget(measured: int, budget: int):
+def _over_budget(measured: int, budget: int, speed: float = MAX_SPEEDUP):
     return fail(
         "AUDIO_DURATION_OUT_OF_RANGE",
         f"measured_frames={measured} ({measured / 30:.2f}s) exceeds budget_frames={budget} "
-        f"({budget / 30:.2f}s) even at the {MAX_SPEEDUP}x maximum speed-up; shorten the script",
+        f"({budget / 30:.2f}s) at {speed}x speed (maximum allowed {MAX_SPEEDUP}x); shorten the script",
     )
 
 
@@ -216,14 +215,14 @@ async def _align_clip(provider: Provider, clip: Clip, speed: float, retries: int
                     f"{turn.dialogue_id}: aligner reported a different audio hash than the canonical WAV",
                     retryable=True,
                 )
-            words, _ = build_words(turn.dialogue_id, turn.text, result.words, duration_ms)
+            words = build_words(turn.dialogue_id, turn.text, result.words, duration_ms)
             return clip, Final(wav, sha, frames, sample_count, duration_ms, words, payload)
         except Exception as exc:
             code = getattr(getattr(exc, "error", None), "code", None)
             if code not in RESYNTH_CODES or attempt >= retries:
                 raise
             attempt += 1
-            clip, _ = await _synth_prepared(provider, turn, attempt, retries)
+            clip, attempt = await _synth_prepared(provider, turn, attempt, retries)
 
 
 async def _write_clip(runtime: Runtime, base: str, clip: Clip, final: Final, quality: str) -> UtteranceAudio:
@@ -271,7 +270,7 @@ async def _run(provider: Provider, request: VoiceRequest, runtime: Runtime, cfg:
         finals.append(await _align_clip(provider, clip, speed, retries, attempt))
     total = sum(f.frames for _, f in finals)
     if total > request.max_speech_frames:
-        raise _over_budget(total, request.max_speech_frames)
+        raise _over_budget(total, request.max_speech_frames, speed)
 
     base = f"projects/{request.project_id}/voice/v{request.script.script_revision}"
     utterances = [await _write_clip(runtime, base, c, f, provider.timing_quality) for c, f in finals]

@@ -1,0 +1,12 @@
+# Dependency fragment for the root Python lock (member 1 merges). API-side only:
+# the speech client + audio-file processing. Torch/CUDA/WhisperX/Chatterbox are NOT here;
+# they live in the two GPU containers' own locks (gpu_services/*/requirements.txt).
+httpx>=0.27
+numpy>=1.26
+pydantic>=2.7
+
+# tests only
+pytest>=8
+# gpu_services tests also exercise the FastAPI apps with fake engines:
+fastapi>=0.110
+python-multipart>=0.0.9
