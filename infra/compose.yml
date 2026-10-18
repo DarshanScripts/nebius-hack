@@ -23,8 +23,8 @@ services:
 
   renderer:
     build:
-      context: ..
-      dockerfile: renderer/Dockerfile
+      context: ../renderer
+      dockerfile: Dockerfile
     environment:
       ARTIFACT_ROOT: /workspace/output
       RENDER_WORKER_PORT: "8001"

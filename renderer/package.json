@@ -1,0 +1,24 @@
+{
+  "name": "reel-renderer",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "worker": "tsx src/worker.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "studio": "remotion studio src/index.ts",
+    "test": "tsx --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@remotion/bundler": "4.0.534",
+    "@remotion/cli": "4.0.534",
+    "@remotion/renderer": "4.0.534",
+    "@types/node": "22.20.5",
+    "@types/react": "19.3.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "remotion": "4.0.534",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3"
+  }
+}

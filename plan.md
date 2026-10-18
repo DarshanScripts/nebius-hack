@@ -2,7 +2,7 @@
 
 ## 1. Read first and freeze these decisions
 
-Read `context.md`, then your member assignment below, then the shared contracts. Your member number determines your branch and allowed files. **Member 1's initial platform code now exists on `feat/m1-platform`; the feature modules still need implementation/merging.** See `backend/core/README.md` for runnable commands and current evidence. The owner has created one Nebius GPU VM; its public IP is pending. Existing configuration is recorded in section 13. Do not wait for its IP or recreate infrastructure before starting your fixture-based work.
+Read `context.md`, then your member assignment below, then the shared contracts. Your member number determines your branch and allowed files. **All four feature branches are now merged locally into `feat/m1-platform`; integration changes are not yet published.** See `agents.md` for the current verified state and remaining work. Sections describing unimplemented modules and a created Compute VM are historical build assignments: the team project currently has a running Jupyter Devlab and zero standalone Compute VMs. All five services now run directly on that Devlab behind Jupyter Server Proxy; the cloud editor created a live project, but no final live reel is complete. Do not create another GPU resource.
 
 **Deliverable:** a topic creates a grounded, two-character educational reel. Six scenes generate concurrently and become previewable progressively. A message edits one scene. Stitch renders a 1080×1920, 30 fps, exactly 60-second MP4 on Nebius Cloud, including voice, captions, and moving character PNGs.
 

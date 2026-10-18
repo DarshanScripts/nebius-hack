@@ -4,6 +4,7 @@
 !.env.example
 .bootstrap/
 .venv/
+.venv-*/
 __pycache__/
 *.pyc
 node_modules/
@@ -13,4 +14,5 @@ assets/characters/*.png
 assets/voices/
 *.log
 .pytest_cache/
+.remotion/
 .ruff_cache/

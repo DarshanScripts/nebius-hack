@@ -1,0 +1,10 @@
+{
+  "queries": [
+    {"scene_index": 1, "dialogue_ids": ["d001", "d002"], "query": "MOCK two smartphones call signaling diagram", "reason": "MOCK fixture: call setup"},
+    {"scene_index": 2, "dialogue_ids": ["d003", "d004"], "query": "MOCK voice audio packets codec diagram", "reason": "MOCK fixture: audio packets"},
+    {"scene_index": 3, "dialogue_ids": ["d005", "d006"], "query": "MOCK end-to-end encryption lock diagram", "reason": "MOCK fixture: encryption"},
+    {"scene_index": 4, "dialogue_ids": ["d007", "d008"], "query": "MOCK relay server network path diagram", "reason": "MOCK fixture: relay; intentionally unavailable to exercise vector fallback"},
+    {"scene_index": 5, "dialogue_ids": ["d009", "d010"], "query": "MOCK adaptive bitrate packet loss chart", "reason": "MOCK fixture: adaptation"},
+    {"scene_index": 6, "dialogue_ids": ["d011", "d012"], "query": "MOCK voice call summary infographic", "reason": "MOCK fixture: takeaway"}
+  ]
+}

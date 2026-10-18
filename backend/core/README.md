@@ -93,12 +93,12 @@ uv run python -m scripts.check_nemotron
 ```
 
 This makes two small billable requests to the configured NVIDIA model (plain JSON,
-then forced tool calling) and saves credential-free capability metadata. Initial
-requests both returned HTTP 500; neither capability has passed. The configured
-default remains `json_prompt` pending a successful request. No native JSON Schema
-capability has been claimed. No paid Tavily or voice job was run for these checks.
+then forced tool calling) and saves credential-free capability metadata. Both
+requests returned HTTP 200 on 2026-10-18, and the local ignored `.env` selects
+`tool_calling`. Native JSON Schema capability remains untested.
 
 `infra/` provides API/web Dockerfiles, Nginx proxy, base Compose and a GPU overlay.
-See `infra/README.md` for exact Docker build paths, environment ownership and the
-existing Nebius VM instructions. Other modules, VM IP/SSH, actual container builds,
-GPU inference and a real final video remain integration acceptance work.
+See `infra/README.md` for exact Docker build paths and current Nebius status.
+The team GPU resource is a Jupyter Devlab, not a standalone Compute VM. Both
+speech services passed live reference-WAV inference and word alignment on that
+GPU; cloud API/render deployment and a live final video remain pending.

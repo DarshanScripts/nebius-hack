@@ -154,6 +154,34 @@ def test_targeted_edit_stale_progress_and_final(tmp_path):
     asyncio.run(check())
 
 
+@pytest.mark.parametrize("mode,attempts,suffix,accepted", [
+    ("agent", 1, "a1", True),
+    ("agent", 2, "a2", True),
+    ("fallback", 2, "afb", True),
+    ("agent", 1, "a0", False),
+    ("fallback", 2, "a2", False),
+])
+def test_preview_job_matches_final_build(tmp_path, mode, attempts, suffix, accepted):
+    class RepairedScenes(SceneDoubles):
+        async def preview(self, request, runtime):
+            outcome = await super().preview(request, runtime)
+            outcome.build.generation_mode = mode
+            outcome.build.repair_attempts = attempts
+            outcome.render.job_id = f"{request.job_id}-{suffix}"
+            return outcome
+
+    async def check():
+        coordinator, project_id, _ = await ready(tmp_path, RepairedScenes())
+        try:
+            snapshot = coordinator.repo.get(project_id)
+            assert (snapshot.status == "ready") == accepted
+            if not accepted:
+                assert all(s.error.code == "CONTRACT_VALIDATION_FAILED" for s in snapshot.scenes)
+        finally:
+            await coordinator.close()
+    asyncio.run(check())
+
+
 def test_failed_scene_and_failed_edit_preserve_outputs(tmp_path):
     async def check():
         doubles = SceneDoubles()

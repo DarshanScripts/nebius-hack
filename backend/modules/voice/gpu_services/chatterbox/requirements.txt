@@ -249,7 +249,7 @@ scipy==1.17.1
     #   librosa
     #   pyloudnorm
     #   scikit-learn
-setuptools==80.10.2
+setuptools==80.9.0
     # via
     #   -r requirements.in
     #   triton

@@ -4,12 +4,12 @@
 + transcripts + **measured word timestamps** (`words.json`, `subtitles.srt`) + `bundle.json`.
 Live mode = our Chatterbox Turbo service (:8002) then our WhisperX forced-alignment service (:8003).
 Mock mode = deterministic tones + synthetic timing, `timing_quality: "mock"`, no services needed.
-Branch `feat/m3-voice-alignment` includes the member 1 platform seed `d3dfba6` (real `contracts/`).
+Branch `feat/m3-voice-alignment` is synced with member 1's integration branch (`feat/m1-platform` @ `0b53b03`).
 
 ## Run
 
 ```bash
-uv sync && uv pip install numpy python-multipart pytest   # numpy: see "Integration" (not yet in the root lock)
+uv sync                                                  # root lock includes numpy + python-multipart
 export PYTHONPATH="$PWD"
 python -m backend.modules.voice.demo --mock --output output/demos/voice --clean
 python -m backend.modules.voice.demo --live --env .env --assets assets --output output/demos/voice   # needs both services
@@ -61,18 +61,18 @@ Write numbers/acronyms in spoken form in the script and avoid `[tags]`: the text
 | WhisperX `:8003` | `POST /v1/align` (Bearer `ALIGNMENT_API_KEY`; multipart `audio, dialogue_id, transcript, language=en`) -> `AlignmentResult` + extra `quality{mean_score,min_score,...}`; `GET /health` | known-script forced alignment only; `WHISPERX_TRANSCRIBE=true` adds an ASR similarity check |
 
 Both load their model in a background thread at startup and report `status: loading|ok|error` plus the GPU name on
-`/health`; loading includes a real inference smoke test. **Build context is the repository root**, matching
-`infra/compose.gpu.yml`:
+`/health`; loading includes a real inference smoke test. **Build context is each service's own directory**, matching
+member 1's `infra/compose.gpu.yml`:
 
 ```bash
-docker build -f backend/modules/voice/gpu_services/chatterbox/Dockerfile -t reel-chatterbox .
-docker build -f backend/modules/voice/gpu_services/whisperx/Dockerfile   -t reel-whisperx .
+docker build -t reel-chatterbox backend/modules/voice/gpu_services/chatterbox
+docker build -t reel-whisperx   backend/modules/voice/gpu_services/whisperx
 ```
 
 Dependencies are locked **independently** with `uv pip compile` for Python 3.11 / linux x86_64 (`requirements.in` ->
 `requirements.txt`, `--exclude-newer 2026-10-11`): torch/torchaudio **2.8.0+cu128** (CUDA 12.8 wheels with Blackwell sm_120
 kernels). `chatterbox-tts` 0.1.7 pins `torch==2.6.0` (no Blackwell kernels), so the Dockerfile installs it `--no-deps` on top of the
-lock. `setuptools<81` is pinned because Chatterbox's watermarker (`resemble-perth`) imports `pkg_resources`; with setuptools 84
+lock. `setuptools==80.9.0` is pinned because Chatterbox's watermarker (`resemble-perth`) imports `pkg_resources`; with setuptools 84
 it silently disables itself and the model fails to construct (reproduced, then fixed). WhisperX is pinned to 3.8.6 with
 `pandas<3`; NLTK `punkt_tab` is baked into the image. First boot downloads ~4 GB of public Chatterbox weights (no HF token
 needed) and the 360 MB wav2vec2 aligner into the `/models` volumes.
@@ -92,11 +92,10 @@ needed) and the 360 MB wav2vec2 aligner into the `/models` volumes.
 
 ## Integration steps for member 1
 
-1. Merge this branch (contains `d3dfba6`; touches only `backend/modules/voice/`).
-2. Add `numpy>=1.26` to root `pyproject.toml` dependencies and `uv lock`; without it the voice module import fails and the
-   stage reports `MODULE_UNAVAILABLE`. (`httpx`/`pydantic` are already there; `python-multipart` only for these tests.)
-3. Put real `assets/voices/{sundar,jensen}/reference.wav` (> 5 s) and `reference.txt` on the VM.
-4. `docker compose --env-file .env -f infra/compose.yml -f infra/compose.gpu.yml up -d --build chatterbox whisperx`,
+1. Merge this branch into `feat/m1-platform`. It already contains `0b53b03`; the only new changes are inside
+   `backend/modules/voice/` (retry-safe immutable outputs + tests + README). Root deps (`numpy`) and Compose wiring are done.
+2. Put real `assets/voices/{sundar,jensen}/reference.wav` (> 5 s) and `reference.txt` on the VM.
+3. `docker compose --env-file .env -f infra/compose.yml -f infra/compose.gpu.yml up -d --build chatterbox whisperx`,
    wait for both `/health` to report `"status":"ok"` with the GPU name, then run the live demo once from the API container or
    with SSH forwards (`python -m backend.modules.voice.demo --live`) before setting `MOCK_MODE=false`.
 
