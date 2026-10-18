@@ -75,7 +75,7 @@ function snapshot(record: MockRecord): ProjectSnapshot {
     script: elapsed >= 4 ? { schema_version: '1.0', project_id: record.id, script_revision: 1, title: 'How a voice call comes together', language: 'en', turns } : null,
     images: null,
     audio: elapsed >= 8 ? { schema_version: '1.0', project_id: record.id, script_revision: 1, utterances, total_speech_frames: 1440 } : null,
-    timeline: elapsed >= 9 ? { schema_version: '1.0', project_id: record.id, script_revision: 1, video: { width: 1080, height: 1920, fps: 30, duration_frames: 1800, scene_count: 6 }, utterances: turns.map((turn, i) => ({ dialogue_id: turn.dialogue_id, start_frame: i * 135, end_frame: i * 135 + 120 })), scenes: slots } : null,
+    timeline: elapsed >= 9 ? { schema_version: '1.0', project_id: record.id, script_revision: 1, video: { width: 1080, height: 1920, fps: 30, duration_frames: 1800, scene_count: 6 }, utterances: turns.map((turn, i) => { const sceneIndex = Math.floor(i / 2); const start_frame = i % 2 ? (sceneIndex === 5 ? 1491 : boundaries[sceneIndex + 1] - 120) : boundaries[sceneIndex]; return { dialogue_id: turn.dialogue_id, start_frame, end_frame: start_frame + 120 } }), scenes: slots } : null,
     scenes, final, final_project_revision: record.stitchAt ? (record.editAt && record.editAt < record.stitchAt ? 2 : 1) : null,
     final_is_stale: Boolean(record.stitchAt && record.editAt && record.editAt > record.stitchAt), error: null,
   }
@@ -106,7 +106,7 @@ function events(record: MockRecord): ProjectEvent[] {
     entries.push({ ...event(record, 23, 0, 'render.started', 'Final reel rendering'), at: new Date(record.stitchAt).toISOString() })
     entries.push({ ...event(record, 24, 0, 'render.completed', 'Final reel ready to download'), at: new Date(record.stitchAt + 7000).toISOString() })
   }
-  return entries.filter(entry => Date.parse(entry.at) <= Date.now() && (entry.event_id > 20 || elapsed >= (Date.parse(entry.at) - record.created) / 1000)).sort((a, b) => a.event_id - b.event_id)
+  return entries.filter(entry => Date.parse(entry.at) <= Date.now() && (entry.event_id > 20 || elapsed >= (Date.parse(entry.at) - record.created) / 1000)).sort((a, b) => Date.parse(a.at) - Date.parse(b.at) || a.event_id - b.event_id).map((entry, index) => ({ ...entry, event_id: index + 1 }))
 }
 
 export const mockApi: EditorApi = {

@@ -1,0 +1,44 @@
+import assert from 'node:assert/strict'
+import { mkdir } from 'node:fs/promises'
+import { chromium } from 'playwright'
+
+const base = process.env.SMOKE_URL || 'http://127.0.0.1:5173'
+const browser = await chromium.launch({ channel: process.env.SMOKE_BROWSER || 'msedge', headless: true })
+const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
+const apiRequests = []
+page.on('request', request => { if (new URL(request.url()).pathname.startsWith('/api/')) apiRequests.push(request.url()) })
+await mkdir('.artifacts', { recursive: true })
+
+try {
+  await page.goto(`${base}/?mock=1`)
+  await page.getByRole('button', { name: 'Create reel' }).click()
+  await page.getByText('Research & sources').waitFor()
+  await page.getByText('The conversation').waitFor()
+  await page.getByText('Audio & word timing').first().waitFor()
+  await page.getByText('Scene 4 preview ready').waitFor({ timeout: 30000 })
+  const scenes = page.locator('.scene-card')
+  assert.equal(await scenes.count(), 6)
+  assert.deepEqual(await scenes.locator('.scene-number').allTextContents(), ['01', '02', '03', '04', '05', '06'])
+  const readyEvents = await page.locator('.activity-event').filter({ hasText: 'preview ready' }).allTextContents()
+  assert.deepEqual(readyEvents.map(text => Number(text.match(/Scene (\d)/)?.[1])), [3, 1, 6, 2, 5, 4])
+  await page.screenshot({ path: '.artifacts/ready.png' })
+
+  const before = await scenes.locator('video').evaluateAll(elements => elements.map(element => element.getAttribute('src')))
+  await scenes.nth(5).locator('.scene-select').click()
+  await page.getByRole('button', { name: 'Send correction' }).click()
+  await page.getByText('Scene 6 revised preview ready').waitFor({ timeout: 10000 })
+  const after = await scenes.locator('video').evaluateAll(elements => elements.map(element => element.getAttribute('src')))
+  assert.deepEqual(after.slice(0, 5), before.slice(0, 5))
+  assert.notEqual(after[5], before[5])
+  await page.screenshot({ path: '.artifacts/revised.png' })
+
+  await page.getByRole('button', { name: /Stitch reel/ }).click()
+  await page.getByText(/Rendering \d+%/).waitFor()
+  await page.getByRole('link', { name: 'Download MP4' }).waitFor({ timeout: 12000 })
+  await page.reload()
+  await page.getByRole('link', { name: 'Download MP4' }).waitFor()
+  assert.equal(await scenes.count(), 6)
+  assert.deepEqual(apiRequests, [])
+  await page.screenshot({ path: '.artifacts/stitched.png' })
+  console.log(JSON.stringify({ slots: [1, 2, 3, 4, 5, 6], completion_order: [3, 1, 6, 2, 5, 4], scene_6_revision: 2, other_preview_urls_unchanged: true, stitch_download: true, refresh_restored: true, api_requests: apiRequests.length }))
+} finally { await browser.close() }
