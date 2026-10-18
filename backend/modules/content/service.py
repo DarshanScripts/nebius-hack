@@ -109,15 +109,15 @@ def _url_key(url: str) -> str:
 REFERENCE_LINE = re.compile(r"^\s*\[(\d{1,3})\]\s*[:.-]?\s*.*?(https?://\S+)", re.M)
 
 
-def _report_citations(report: str, sources: list[Source]) -> dict[str, int]:
+def _report_citations(report: str, sources: list[Source]) -> dict[str, list[int]]:
     """source_id -> the report's own [n]. Tavily's sources array is NOT in the report's reference order
     (seen live: report [12] was sources[15]), so match the report's reference list by URL."""
     by_url = {_url_key(s.url): s.source_id for s in sources}
-    found: dict[str, int] = {}
+    found: dict[str, list[int]] = {}
     for n, url in REFERENCE_LINE.findall(report):
         sid = by_url.get(_url_key(url.rstrip(").,>]")))
-        if sid and sid not in found:
-            found[sid] = int(n)
+        if sid and int(n) not in found.setdefault(sid, []):
+            found[sid].append(int(n))  # the same URL can carry several reference numbers
     return found
 
 
@@ -156,7 +156,7 @@ NOTES_SYSTEM = (
 async def _research_notes(runtime: Runtime, topic: str, report: str, sources: list[Source]) -> ResearchNotes:
     source_ids = {s.source_id for s in sources}
     cites = _report_citations(report, sources)
-    listing = "\n".join(f"{s.source_id}" + (f" = report [{cites[s.source_id]}]" if s.source_id in cites else "")
+    listing = "\n".join(f"{s.source_id}" + (" = report " + ", ".join(f"[{n}]" for n in cites[s.source_id]) if s.source_id in cites else "")
                         + f" | {s.title} | {s.url}" for s in sources)
     messages = [
         {"role": "system", "content": NOTES_SYSTEM},
@@ -377,12 +377,15 @@ async def _plan_queries(request: ImageRequest, runtime: Runtime) -> list[ImageQu
         plan, problems = await _structured_checked(runtime, messages, ImageQueryPlan, check)
         if not problems:
             return _normalize_plan(plan, script)
-    except StageFailure:
-        pass
+        why = "; ".join(problems)
+    except StageFailure as exc:
+        why = f"{exc.error.code}: {exc.error.message}"
     # Planning is a nicety; fall back to queries built from the scene text instead of failing images.
+    # The reason lands in plan.json via ImageQuery.reason so a weak image run can be explained afterwards.
+    topic = request.research.topic.rstrip("?. ")
     return [ImageQuery(scene_index=i, dialogue_ids=_scene_ids(script, i),
-                       query=f"{request.research.topic} {next(t.text for t in script.turns if t.scene_index == i and t.speaker_id == 'jensen')}"[:300],
-                       reason="Deterministic fallback query: image-query planning failed validation")
+                       query=f"{topic} {next(t.text for t in script.turns if t.scene_index == i and t.speaker_id == 'jensen')}"[:300],
+                       reason=f"Deterministic fallback query; planning failed: {why}"[:500])
             for i in range(1, 7)]
 
 
@@ -398,7 +401,8 @@ async def _search(query: ImageQuery, runtime: Runtime, base: str, client) -> lis
 
 class _SceneRank(BaseModel):
     scene_index: int = Field(ge=1, le=6)
-    ranked: list[int] = Field(default_factory=list)
+    ranked: list[int] = Field(default_factory=list,
+                              description="Fitting candidates, best first, using the 1-based [k] numbers shown; [] if none fits")
 
 
 class _ImageRanking(BaseModel):
@@ -406,10 +410,12 @@ class _ImageRanking(BaseModel):
 
 
 RANK_SYSTEM = """You choose images for scenes of an educational reel. For each scene you get its dialogue and
-numbered candidate images (descriptions from a search engine). Return, per scene_index, the candidate numbers that
-clearly depict that scene's idea for this topic, best first. Exclude unrelated meanings of the same word (for example an
-electrical relay or an office phone system when the scene is about internet call relays), stock photos of people,
-and logos. Return an empty list when nothing fits; a missing image is better than a wrong one. Return JSON only."""
+numbered candidate images (descriptions from a search engine). Return, per scene_index, the fitting candidates'
+1-based [k] numbers, best first. A candidate fits when it is about this topic (this product's calls, devices or
+infrastructure) and does not contradict the scene; a general on-topic diagram fits when nothing more specific exists.
+Reject only: other meanings of a word (an electrical relay, an office phone system), stock photos of people, logos,
+and screenshots of unrelated apps. Most scenes should get at least one image; return [] only when every candidate is
+off-topic. Return JSON only."""
 
 
 async def _rank(runtime: Runtime, request: ImageRequest, cands: dict[int, list[images.Candidate]]) -> dict[int, list[int]]:
@@ -495,7 +501,7 @@ async def find_images(request: ImageRequest, runtime: Runtime) -> ImageBundle:
         await runtime.write_json(f"{base}/plan.json", {"queries": [q.model_dump(mode="json") for q in queries]})
         sem = asyncio.Semaphore(SEARCH_CONCURRENCY)
 
-        async def guarded(q: ImageQuery, coro):
+        async def guarded(coro):
             async with sem:
                 try:
                     return await coro
@@ -503,12 +509,12 @@ async def find_images(request: ImageRequest, runtime: Runtime) -> ImageBundle:
                     return f"{type(exc).__name__}: {exc}"[:500]
 
         async with tavily.make_client(key) as search_client, images.make_client() as dl_client:
-            found = await asyncio.gather(*(guarded(q, _search(q, runtime, base, search_client)) for q in queries))
+            found = await asyncio.gather(*(guarded(_search(q, runtime, base, search_client)) for q in queries))
             cands = {q.scene_index: c for q, c in zip(queries, found) if isinstance(c, list)}
             order = await _rank(runtime, request, cands) if cands else {}
             await runtime.write_json(f"{base}/ranking.json", {str(i): o for i, o in order.items()})
             picked = await asyncio.gather(*(
-                guarded(q, _download_first(q, [cands[q.scene_index][k] for k in order[q.scene_index]],
+                guarded(_download_first(q, [cands[q.scene_index][k] for k in order[q.scene_index]],
                                            runtime, base, dl_client))
                 for q in queries if q.scene_index in cands))
         by_scene = {s.query.scene_index: s for s in picked if isinstance(s, ImageSelection)}

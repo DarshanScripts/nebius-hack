@@ -332,7 +332,9 @@ def test_report_citations_follow_reference_list_not_sources_order():
     sources = service._index_sources(raw["sources"])
     cites = service._report_citations(raw["content"], sources)
     mlow = next(s for s in sources if "mlow" in s.url)
-    assert len(cites) == len(sources) and cites[mlow.source_id] == 12 and mlow.source_id == "src015"
+    assert len(cites) == len(sources) and cites[mlow.source_id] == [12] and mlow.source_id == "src015"
+    twice = raw["content"] + "\n[99] " + mlow.url + "\n"
+    assert service._report_citations(twice, sources)[mlow.source_id] == [12, 99]
 
 
 def test_acronym_lists_are_sent_back_for_repair(tmp_path):
