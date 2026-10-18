@@ -95,7 +95,7 @@ async def run(args: argparse.Namespace, report: dict[str, Any]) -> None:
     try:
         await wait_health(url)
         rt = FixtureRuntime(out, mock_mode=args.mock, settings=settings, llm=None if args.mock else live_llm_from_env())
-        ctx = await build_fixture_context(rt)
+        ctx = await build_fixture_context(rt, character_pngs=args.character_pngs)
         report["context"] = {"context_hash": ctx.context_hash, "timeline_hash": ctx.timeline_hash, "boundaries": [s.start_frame for s in ctx.timeline.scenes] + [1800]}
         log(f"fixture context ready: boundaries {report['context']['boundaries']}")
 
@@ -198,6 +198,7 @@ def main() -> None:
     p.add_argument("--worker-url", default=None, help="use a running worker (its ARTIFACT_ROOT must equal --output)")
     p.add_argument("--port", type=int, default=8011, help="port for the worker the demo starts")
     p.add_argument("--timeout", type=int, default=1800, help="per render job deadline in seconds")
+    p.add_argument("--character-pngs", action="store_true", help="use MOCK transparent character PNGs instead of silhouette placeholders")
     p.add_argument("--only", nargs="+", choices=["s01", "s02", "s03", "s04", "s05", "s06"], help="generate/preview only these scenes (e.g. one live scene); skips edit/fallback/final")
     p.add_argument("--skip-previews", action="store_true")
     p.add_argument("--skip-fallback", action="store_true")

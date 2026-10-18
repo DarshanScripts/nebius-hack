@@ -96,6 +96,16 @@ def _wav(words: list[WordTiming], speaker: str) -> bytes:
     return buf.getvalue()
 
 
+def _encode_png(width: int, height: int, px, channels: int) -> bytes:
+    raw = b"".join(b"\x00" + b"".join(bytes(px(x, y)) for x in range(width)) for y in range(height))
+
+    def chunk(tag: bytes, data: bytes) -> bytes:
+        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+
+    color_type = 6 if channels == 4 else 2
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, color_type, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b"")
+
+
 def _png(width: int, height: int) -> bytes:
     """A simple MOCK diagram image (two phones and a relay), pure stdlib."""
     def px(x: int, y: int) -> tuple[int, int, int]:
@@ -108,12 +118,17 @@ def _png(width: int, height: int) -> bytes:
             return (22, 163, 74)
         return (255, 255, 255)
 
-    raw = b"".join(b"\x00" + b"".join(bytes(px(x, y)) for x in range(width)) for y in range(height))
+    return _encode_png(width, height, px, 3)
 
-    def chunk(tag: bytes, data: bytes) -> bytes:
-        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
 
-    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b"")
+def _character_png(rgb: tuple[int, int, int], width: int = 210, height: int = 288) -> bytes:
+    """MOCK transparent character cut-out (RGBA): head + shoulders, the rest fully transparent."""
+    def px(x: int, y: int) -> tuple[int, int, int, int]:
+        head = (x - width / 2) ** 2 + (y - height * 0.3) ** 2 < (width * 0.22) ** 2
+        body = y > height * 0.55 and abs(x - width / 2) < width * 0.42 * min(1.0, (y - height * 0.5) / (height * 0.2))
+        return (*rgb, 255) if head or body else (0, 0, 0, 0)
+
+    return _encode_png(width, height, px, 4)
 
 
 def _mock_words(dialogue_id: str, text: str) -> list[WordTiming]:
@@ -148,7 +163,8 @@ def build_timeline(project_id: str, script_revision: int, frame_counts: list[int
     return Timeline(project_id=project_id, script_revision=script_revision, utterances=utts, scenes=scenes)
 
 
-async def build_fixture_context(runtime: Any, project_id: str = PROJECT_ID) -> SceneContext:
+async def build_fixture_context(runtime: Any, project_id: str = PROJECT_ID, *, character_pngs: bool = False) -> SceneContext:
+    """character_pngs=True adds MOCK transparent character PNGs (exercises the shell's image path)."""
     base = f"projects/{project_id}"
     raw = await runtime.write_json(f"{base}/research/raw.json", {"mock": True, "note": "MOCK research fixture; not a Tavily response"})
     research = ResearchBundle(
@@ -205,9 +221,13 @@ async def build_fixture_context(runtime: Any, project_id: str = PROJECT_ID) -> S
     assert [s.start_frame for s in timeline.scenes] + [1800] == EXPECTED_BOUNDARIES, timeline.scenes
     await runtime.write_json(f"{base}/timeline.json", timeline)
 
+    images_by_id: dict[str, Any] = {"sundar": None, "jensen": None}
+    if character_pngs:
+        for cid, rgb in (("sundar", (37, 99, 235)), ("jensen", (22, 163, 74))):
+            images_by_id[cid] = await runtime.write_bytes(f"{base}/inputs/characters/{cid}-mock.png", _character_png(rgb), "image/png")
     characters = [
-        CharacterSpec(character_id="sundar", display_name="Sundar Pichai"),
-        CharacterSpec(character_id="jensen", display_name="Jensen Huang"),
+        CharacterSpec(character_id="sundar", display_name="Sundar Pichai", image=images_by_id["sundar"]),
+        CharacterSpec(character_id="jensen", display_name="Jensen Huang", image=images_by_id["jensen"]),
     ]
     ctx = SceneContext(
         project_id=project_id, research=research, script=script, images=images, audio=audio, timeline=timeline,

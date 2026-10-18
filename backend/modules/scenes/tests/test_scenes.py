@@ -51,10 +51,25 @@ def req(message: str, selected: str | None = None) -> EditRoutingRequest:
     ("Scene #3 should show the firewall earlier", "s03"),
     ("the sixth scene is cluttered", "s06"),
     ("scene number 2 - highlight the relay", "s02"),
+    # diagram vocabulary that overlaps locked-layer words must stay editable
+    ("scene 3: make the audio packets bigger", "s03"),
+    ("scene 4 - show the voice packets moving faster", "s04"),
+    ("in scene 2 make the arrow longer", "s02"),
+    ("scene 5: make the labels shorter", "s05"),
+    ("scene 1: add a speech bubble icon", "s01"),
+    ("scene 6: show the timing of the packets", "s06"),
+    ("scene 2: draw the voice path in green", "s02"),
+    ("scene 4: the voice-call icon is too small", "s04"),
+    ("scene 2: show audio data flowing through the relay", "s02"),
+    ("scene 5: slow down the packet animation", "s05"),
+    ("scene 1: label Jensen's server diagram", "s01"),
+    ("scene 2: make the sound wave icon blue", "s02"),
+    ("scene 4: highlight the encryption step longer", "s04"),
+    ("scene 5: the arrow is too long", "s05"),
 ])
 def test_router_explicit_targets(message, target):
     intent = route_deterministic(req(message))
-    assert (intent.action, intent.scene_id) == ("edit_scene", target)
+    assert (intent.action, intent.scene_id) == ("edit_scene", target), intent.reason
     assert intent.instruction == message
 
 
@@ -65,7 +80,19 @@ def test_router_explicit_targets(message, target):
     ("change the dialogue in scene 1", None),
     ("make all scenes blue", None),
     ("make scene 4 shorter", None),
+    ("scene 5 should be shorter", None),
+    ("scene 2 is too long", None),
+    ("scene 6: extend the scene by two seconds", None),
+    ("scene 3: speed up the speech", None),
     ("fix the captions in scene 2", None),
+    ("scene 2: the audio is out of sync", None),
+    ("scene 4: change the voice to sound calmer", None),
+    ("change what Jensen says in scene 5", None),
+    ("scene 3: Sundar should say something else", None),
+    ("move Jensen to the left in scene 2", None),
+    ("scene 1: make Sundar bigger", None),
+    ("change the theme to dark in scene 3", None),
+    ("make the whole video brighter", None),
     ("make the arrows thicker", None),          # no target and no selection
     ("scene 7 needs work", None),               # out of range -> no valid reference
     ("scene 5: bigger boxes", "s02"),           # explicit conflict with selection
@@ -209,7 +236,8 @@ def test_exhausted_repairs_fall_back_with_visible_metadata(tmp_path, fake_worker
     assert calls["n"] == 3  # initial + two corrective attempts, no more
     assert "setTimeout" in calls["messages"][1][-1]["content"]  # feedback reached the repair prompt
     base = tmp_path / "projects" / ctx.project_id / "scenes" / "s02" / "v1" / "op1"
-    assert {p.name for p in base.iterdir()} == {"a0", "a1", "a2", "afb"}
+    assert {p.name for p in base.iterdir() if p.is_dir()} == {"a0", "a1", "a2", "afb"}
+    assert (base / "task.json").exists()
     assert (base / "a0" / "validation.json").exists() and (base / "afb" / "build.json").exists()
 
 
@@ -287,3 +315,53 @@ def test_authoring_guide_example_and_templates_pass_real_validator(tmp_path):
     for f in files:
         out = subprocess.run([str(REPO / "renderer/node_modules/.bin/tsx"), "src/source-check.ts", str(f)], cwd=REPO / "renderer", capture_output=True, text=True, timeout=120)
         assert '"valid":true' in out.stdout, (f.name, out.stdout, out.stderr[-500:])
+
+
+@pytest.mark.parametrize("code,is_output", [
+    ("STRUCTURED_OUTPUT_INVALID", True), ("STRUCTURED_RESPONSE_INVALID", True), ("SCHEMA_VALIDATION_FAILED", True),
+    ("JSON_PARSE_ERROR", True), ("LLM_UNAVAILABLE", False), ("NEMOTRON_TIMEOUT", False), ("AUTH_INVALID", False),
+    ("RATE_LIMITED", False), ("MODULE_UNAVAILABLE", False), ("SOMETHING_ELSE", False),
+])
+def test_structured_failure_classification(code, is_output):
+    assert service._is_output_problem(PipelineError(code=code, stage="s", message="m")) is is_output
+
+
+def test_core_runtime_output_error_code_still_repairs_then_falls_back(tmp_path, fake_worker):
+    def handler(messages, schema):
+        raise StageFailure(PipelineError(code="STRUCTURED_RESPONSE_INVALID", stage="structured", message="bad json"))
+    rt = FixtureRuntime(tmp_path, mock_mode=False, structured_handler=handler)
+    ctx = run(build_fixture_context(rt))
+    build = run(service.generate_scene(make_task(ctx), rt))
+    assert build.generation_mode == "fallback" and build.repair_attempts == 2
+
+
+def test_brief_exposes_what_plan_8_1_lists(tmp_path):
+    rt = FixtureRuntime(tmp_path)
+    ctx = run(build_fixture_context(rt))
+    from backend.modules.scenes.agent import scene_brief
+    b = scene_brief(make_task(ctx, idx=0))
+    assert b["research"]["summary"] and b["research"]["sources"] and b["claims"]
+    assert len(b["dialogue"]) == 12 and all("words" in t for t in b["dialogue"] if t["dialogue_id"] in ("d001", "d002"))
+    assert len(b["timeline"]) == 6 and len(b["other_scene_images"]) == 5 and b["theme"]["theme_id"] == "notebook_v1"
+
+
+def test_preview_repair_of_an_edit_keeps_the_user_instruction(tmp_path, fake_worker):
+    handler, calls = scripted(GOOD)
+    rt = FixtureRuntime(tmp_path, mock_mode=False, structured_handler=handler)
+    ctx = run(build_fixture_context(rt))
+    v1 = run(service.generate_scene(make_task(ctx, idx=5), rt))
+    task = make_task(ctx, idx=5, rev=2, job="edit1", previous_build=v1, edit_instruction="make the packet diagram clearer")
+    v2 = run(service.generate_scene(task, rt))
+    fake_worker.render_outcomes = ["RENDER_FAILED", "ok"]
+    run(service.render_preview(PreviewRequest(project_id=ctx.project_id, job_id="edit1", context=ctx, slot=task.slot, build=v2), rt))
+    repair_prompt = calls["messages"][-1][-1]["content"]
+    assert "make the packet diagram clearer" in repair_prompt and "Preview render failed" in repair_prompt
+
+
+def test_mock_character_pngs_are_real_transparent_pngs(tmp_path):
+    rt = FixtureRuntime(tmp_path)
+    ctx = run(build_fixture_context(rt, character_pngs=True))
+    for c in ctx.characters:
+        data = rt.path(c.image.key).read_bytes()
+        assert data[:8] == b"\x89PNG\r\n\x1a\n" and data[25] == 6  # colour type 6 = RGBA
+        assert len(data) == c.image.size_bytes
