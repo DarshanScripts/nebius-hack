@@ -6,7 +6,7 @@ Updated: 2026-10-18. Read [context.md](context.md), [plan.md](plan.md), and the 
 
 The pipeline is topic → Tavily research → grounded Nemotron dialogue → Chatterbox Turbo conditioned on two reference WAVs → WhisperX word timing → six independently editable Remotion scenes → 1080×1920, 30 fps MP4. Visual design: white dotted notebook page, motion workboard in the upper 70%, speaker PNGs in the lower 30%.
 
-Working branch is `feat/m1-platform`. All four teammate branches were fetched and merged locally with `--no-ff`. Integration commit `0b53b03` was pushed to `origin/feat/m1-platform` on 2026-10-18; `main` has not been updated. Do not reset, clean, or overwrite the worktree. Review `git status` and diff before committing. Never stage `.env`, voice references, `.remotion`, output artifacts, caches, or generated video.
+Working branch is `feat/m1-platform`. All four teammate branches were fetched and merged with `--no-ff`; the original integration commit was `0b53b03`. A second integration on 2026-10-18 brought in the teammates' later content, voice, scenes/renderer, and editor changes after `6bcea29`. `main` has not been updated. Do not reset, clean, or overwrite the worktree. Review `git status` and diff before committing. Never stage `.env`, voice references, `.remotion`, output artifacts, caches, or generated video.
 
 The user authorized integration, pushing, and setup of the existing Nebius Devlab. New GPU resources are unnecessary.
 
@@ -86,6 +86,13 @@ restarted and returned `/api/health` status `ok`; the original project's
 scene 1 was retried at 16:23 local time. Confirm that it succeeds before
 running six more scenes. The remote browser control recovered by opening a
 fresh tab in Brave browser ID `1` after older claimed tabs stopped attaching.
+
+The second teammate integration adds URL-mapped Tavily citations and image
+ranking, retry-safe immutable voice outputs, scene repair/worker job IDs that
+match core validation, renderer container build fixes, and an editor HTTP
+client smoke fixture. These changes are merged locally; they have not yet
+been installed on the Devlab at the time of this handoff update. Preserve the
+remote `SCENE_AGENT_MODE=single_call` setting when deploying the scene module.
 
 No cloud final reel was produced yet. The Devlab container has no verified
 Docker/Compose; all five processes were started directly and need relaunch
