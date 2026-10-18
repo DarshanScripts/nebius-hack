@@ -1,0 +1,17 @@
+.git
+.env
+.env.*
+!.env.example
+.ssh
+.aws
+.agents
+.codex
+.bootstrap
+.venv
+**/node_modules
+**/__pycache__
+**/*.pyc
+output
+assets/voices
+assets/characters
+**/*.log

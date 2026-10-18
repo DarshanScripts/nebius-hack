@@ -1,0 +1,14 @@
+.env
+.ssh/
+.env.*
+!.env.example
+.bootstrap/
+.venv/
+__pycache__/
+*.pyc
+node_modules/
+dist/
+output/
+assets/characters/*.png
+assets/voices/
+*.log
