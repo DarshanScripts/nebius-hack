@@ -20,6 +20,8 @@ npm run preview
 
 The standalone mock lives in `src/api/mock.ts`. It uses the same `EditorApi` interface as `src/api/client.ts`, persists projects in browser local storage, publishes delayed research/dialogue/images/audio/timeline states, and completes previews in order `s03, s01, s06, s02, s05, s04`. The six slots remain ordered. Its local MP4 is a two-second, silent placeholder, and its WAV is silent. Both are visibly marked mock; they do not demonstrate real rendering or Chatterbox/WhisperX output. The browser player gets audio only from the preview MP4, never a second simultaneous stream. The mock timeline uses the required frame gaps and scene boundaries `[0,273,543,813,1083,1353,1800]`.
 
+The collapsed sidebar controls have distinct destinations: grid opens the project library, plus opens the new-reel form, and film opens the current reel with its scene pane selected. Film is disabled until a reel exists. The active icon follows the displayed view.
+
 ## Reproduce the acceptance flow
 
 1. Open `/?mock=1` and press **Create reel** with the prefilled topic.
