@@ -1,8 +1,14 @@
 services:
+  api:
+    depends_on:
+      chatterbox:
+        condition: service_healthy
+      whisperx:
+        condition: service_healthy
   chatterbox:
     build:
-      context: ..
-      dockerfile: backend/modules/voice/gpu_services/chatterbox/Dockerfile
+      context: ../backend/modules/voice/gpu_services/chatterbox
+      dockerfile: Dockerfile
     environment:
       VOICE_API_KEY: ${VOICE_API_KEY:?Fill VOICE_API_KEY}
       VOICE_MODEL: ${VOICE_MODEL:-chatterbox-turbo}
@@ -22,8 +28,8 @@ services:
 
   whisperx:
     build:
-      context: ..
-      dockerfile: backend/modules/voice/gpu_services/whisperx/Dockerfile
+      context: ../backend/modules/voice/gpu_services/whisperx
+      dockerfile: Dockerfile
     environment:
       ALIGNMENT_API_KEY: ${ALIGNMENT_API_KEY:?Fill ALIGNMENT_API_KEY}
       ALIGNMENT_MODEL: ${ALIGNMENT_MODEL:-WAV2VEC2_ASR_BASE_960H}

@@ -2,13 +2,21 @@
 
 Read this file and `plan.md` before coding. The team will tell you your member number, 1–5. Implement only that member's assigned files and interfaces. `plan.md` contains the contracts, ownership rules, branch names, and acceptance criteria.
 
+## Integration status (2026-10-18)
+
+All four teammate feature branches have been merged locally into `feat/m1-platform`. The merged coordinator completed a real six-preview, one-scene-edit, 60-second Remotion render in explicit mock mode; the backend suite passed 150 cases, the frontend built, and the renderer typecheck/tests passed. The merge and subsequent integration fixes have not yet been published to GitHub.
+
+The actual team cloud resource in `group08-project` is the running Jupyter Devlab `azure-pinniped-devlab-2` (`devlab-e05bkzg40ksp13hx8z`), with one RTX PRO 6000 Blackwell GPU and a public Jupyter endpoint on port 8888. On 2026-10-18 the project console showed **zero standalone Compute VMs**. The earlier `cyan-ape-instance-8` review was a creation preview, not evidence of an existing VM. The all-container Compute VM layout below remains a deployment design.
+
+On the Devlab, Chatterbox Turbo and WhisperX run in separate Python 3.11 environments on CUDA and report ready. Chatterbox requires `setuptools==80.9.0` because Perth imports `pkg_resources`; the previous lock's setuptools 84 broke startup. The owner's two actual reference WAVs were uploaded privately and live synthesis plus word alignment passed for both: 11 aligned words per speaker with matching exact-audio SHA-256 and ordered timestamps. These services bind only to `127.0.0.1:8002/8003`, and authenticated Jupyter Server Proxy exposes their health routes. Both Nemotron structured-mode capability probes now return HTTP 200. The Python API, Remotion worker, and built editor are also running on this Devlab behind the authenticated Jupyter proxy; a live example topic has entered Tavily research. A completed live reel, visual/audio review, and character PNGs remain outstanding. See `agents.md` for the latest handoff.
+
 ## What we are building
 
 A hackathon application turns a topic into a one-minute educational Instagram reel. Example: **“How does WhatsApp voice calling infrastructure work?”** A Python backend researches the topic with Tavily Deep Research, then NVIDIA Nemotron generates a grounded conversation between two characters. A voice adapter produces their audio and aligned transcripts. Independent Nemotron agents generate animated Remotion scenes. The user previews scenes, requests changes to an individual scene through a message, and presses **Stitch** to render the final video on Nebius Cloud.
 
 The speakers are **Sundar Pichai** and **Jensen Huang**. These are scripted characters in a generated discussion, not quotations from an actual conversation. One asks skeptical or adversarial questions, and the other answers or challenges the premise. Both can counterargue. Ground factual statements in the research and preserve uncertainty about proprietary infrastructure.
 
-We have **five people, five coding agents, and an original five-hour build window**. Member 1 is the project owner and maintains `main`. Members develop on five separate branches and submit their changes for merging into `main`. Member 1's initial platform implementation is on `feat/m1-platform`: canonical contracts/JSON Schemas, settings/runtime, file persistence, timeline, FastAPI routes, coordinator, deployment wiring, and a fixture demo. The four member-owned feature modules are still to be merged. The owner has created the Nebius VM; its public IP has not been supplied. Everyone can begin against fixtures immediately.
+We have **five people and five coding agents**. Member 1 maintains `main`. Members developed on separate branches; all feature modules are now merged locally on `feat/m1-platform`. The application supports fixture-based work while live cloud connectivity is completed.
 
 ## Product flow
 
@@ -70,7 +78,7 @@ Character images should have transparent backgrounds. Voice reference text is th
 
 ## Cloud and configuration
 
-**Use the single created Nebius GPU VM for all five containers:** `web`, `api`, `renderer`, `chatterbox`, and `whisperx`. The API/renderer use CPU resources and share an artifact volume; only the two speech containers need GPU access. Nemotron inference uses the selected NVIDIA hosted API. Speech WAVs move over authenticated internal HTTP calls, keeping module contracts decoupled. Serialize speech pipelines initially. Browser preview playback remains in the frontend. The Stitch button triggers real Remotion rendering/encoding on this VM.
+**Target layout:** co-locate `web`, `api`, `renderer`, `chatterbox`, and `whisperx` on a GPU host with shared artifacts. The current team resource is a Jupyter Devlab running all five services directly on loopback; its authenticated Jupyter proxy serves the editor and API. The API/renderer use CPU resources; only the two speech services need GPU access. Nemotron inference uses the selected NVIDIA hosted API. Speech WAVs move over authenticated HTTP calls. Serialize speech pipelines initially. Browser preview playback remains in the frontend.
 
 ### Created VM and deployment handoff
 

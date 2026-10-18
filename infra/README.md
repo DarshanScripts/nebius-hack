@@ -1,80 +1,133 @@
-# Existing Nebius VM deployment
+# Nebius deployment status and paths
 
-Only Member 1 deploys the integrated checkout. The existing VM is `cyan-ape-instance-8`,
-SSH user `orange_whisky`, RTX PRO 6000 Blackwell, Ubuntu 24.04/CUDA 13.
-Its public IP is still required. Do not create a second VM.
+## What exists now (2026-10-18)
 
-## Before deployment
+The team project `group08-project` has one running Jupyter Devlab,
+`azure-pinniped-devlab-2` (`devlab-e05bkzg40ksp13hx8z`), with an RTX PRO 6000
+Blackwell GPU. The Nebius console lists **zero standalone Compute VMs** in this
+project. `cyan-ape-instance-8` was the name in a VM creation review, not a verified
+running machine. Do not attempt SSH to it or create a duplicate GPU resource.
 
-Merge the content, speech, scene/renderer, and frontend branches. The Docker build
-contexts are the repository root. Member 3 supplies these exact paths:
+The Devlab's Jupyter service is exposed through authenticated port 8888. Its
+Chatterbox Turbo and WhisperX FastAPI services run on `127.0.0.1:8002` and
+`127.0.0.1:8003`, respectively, in separate Python 3.11 environments under
+`/home/jovyan/work/nebius-speech`. Both use Torch 2.8.0+cu128 and report
+`status: ok`, `model_loaded: true`, and `device: cuda`. The two real reference
+WAVs are in `assets/voices/{sundar,jensen}/reference.wav` on the Devlab, mode
+600. A live loopback TTS → WhisperX alignment check passed for both speakers:
+11 ordered word timestamps each, with a SHA-256 match to the normalized audio.
+Generated WAV/JSON files are under `output/speech-check/` on that workspace.
 
-```text
-backend/modules/voice/gpu_services/chatterbox/Dockerfile
-backend/modules/voice/gpu_services/whisperx/Dockerfile
-```
+The Chatterbox lock pins `setuptools==80.9.0`. Perth imports `pkg_resources`,
+which is absent from the previous `setuptools==84.0.0` resolution. The pin was
+confirmed by importing the actual Perth watermark class on the GPU host.
 
-Member 4 supplies `renderer/Dockerfile`; the worker must bind `0.0.0.0:8001`.
-Member 5 supplies the frontend npm build. Service interfaces/ports match plan.md.
-Each speech container binds its service to `0.0.0.0`, ports 8002/8003.
+The two speech services bind **loopback only**. Jupyter Server Proxy 4.6.0 is
+installed and enabled in the Devlab's Jupyter server. After a Devlab restart
+on 2026-10-18, the authenticated Jupyter tunnel returned `status: ok`,
+`model_loaded: true`, and `device: cuda` from both
+`/proxy/8002/health` and `/proxy/8003/health`. The Jupyter tunnel hostname
+may change on later restarts. The synthesis and alignment POST routes still
+require their separate bearer keys. The merged application is now installed
+under `/home/jovyan/work/nebius-app`, using a separate Python 3.12 environment
+and a persistent conda Node 22 environment under the speech workspace. The
+API, Remotion worker, and built Vite preview run on loopback ports 8000, 8001,
+and 5173. The API reports `mode: live`, the worker reports `auth_required:
+true`, and the editor loads through authenticated `/proxy/5173/`. The
+frontend calls `/proxy/8000/api` on the same Jupyter origin. The API reaches
+speech through loopback, so no server-to-server Jupyter token is needed. The
+browser can reach the API only after authenticating to Jupyter. The current
+tunnel URL is
+`https://port8888-f560v6ypmfn50ww.tunnel.applications.uk-south2.nebius.cloud/proxy/5173/`;
+get the current hostname from Nebius if the Devlab restarts.
 
-Connect using the owner's ignored SSH key:
+A live example project for “How does WhatsApp voice calling infrastructure
+work?” was created through the cloud editor and reached Tavily's asynchronous
+research stage. This is **not yet a completed cloud reel**. A previous local
+mock pipeline completed a real Remotion render, but live research, dialogue,
+speech, scenes, and final video still require acceptance. Character PNGs
+remain missing. Do not expose the loopback ports publicly or remove bearer
+checks.
+
+## Recheck the existing GPU services
+
+From an authenticated Jupyter terminal, without printing `.env` or token values:
 
 ```bash
-ssh -i .ssh/nebius_reel_ed25519 orange_whisky@<VM_PUBLIC_IP>
+cd /home/jovyan/work/nebius-speech
+curl --fail http://127.0.0.1:8002/health
+curl --fail http://127.0.0.1:8003/health
+tail -n 30 logs/chatterbox-service.log
+tail -n 30 logs/whisperx-service.log
 ```
 
-On the VM, inspect `nvidia-smi`, `docker version`, `docker compose version`, and
-`docker info` before changing host packages. Install Docker Engine/Compose and
-NVIDIA Container Toolkit if missing, following the official install instructions.
-Member 3 must verify actual GPU inference in both containers with compatible
-Blackwell CUDA/PyTorch dependencies. A successful `nvidia-smi` alone is insufficient.
+Treat a health response as ready only if both `status` is `ok` and
+`model_loaded` is `true`. Health endpoints contain no credentials. Before
+restarting either service, inspect its current PID, command, and working
+directory; only stop a verified process belonging to this workspace. Its
+private `.env` must stay mode 600. Avoid installing speech dependencies into
+Jupyter's Python 3.13 base environment.
 
-- https://docs.docker.com/engine/install/ubuntu/
-- https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+Jupyter Server Proxy itself is installed into the Jupyter environment. If a
+future Devlab restart loses it, check `jupyter server extension list`;
+the extension was also installed into the persistent user site under
+`/home`. Restart only absent workspace Uvicorn processes, loading
+`/home/jovyan/work/nebius-speech/.env` (not the older `.env.gpu`).
 
-## Start the integrated application
+## Current Devlab app
 
-Clone the repo onto the VM. Copy the owner's `.env` via SSH separately; it must
-remain mode 600. Add the character PNGs and voice references under `assets/`.
-Change `MOCK_MODE=false` only after live speech/inference readiness has been checked.
-Prepare the artifact directory for the API user (UID 10001) and shared renderer
-group (GID 10001, added by Compose):
+The merged worktree was uploaded as a source archive, then installed in
+`/home/jovyan/work/nebius-app`. Its private `.env` is mode 600 and contains
+only the provider and internal keys needed by this app, plus paths to the
+speech assets. The worker process receives only its render token and artifact
+settings. Both speech services use their separate private env. Logs live in
+`logs/{api,renderer,frontend,chatterbox,whisperx}-service.log` under their
+respective workspaces.
+
+After a Devlab restart, check `jupyter server extension list` and restart
+only absent services from the correct workspace. The speech launch commands
+and exact paths are in [agents.md](../agents.md). Start the app from its root,
+keeping every service on loopback:
 
 ```bash
-sudo install -d -m 2775 -o 10001 -g 10001 output
+cd /home/jovyan/work/nebius-app
+nohup .venv/bin/python -m uvicorn backend.app:app --host 127.0.0.1 --port 8000 --workers 1 > logs/api-service.log 2>&1 &
+
+nohup bash -lc 'cd /home/jovyan/work/nebius-app; set -a; source .env; set +a; export PATH=/home/jovyan/work/nebius-speech/.node/bin:$PATH; exec env -i HOME=/home/jovyan PATH="$PATH" LANG=C.UTF-8 ARTIFACT_ROOT="$ARTIFACT_ROOT" RENDER_WORKER_TOKEN="$RENDER_WORKER_TOKEN" RENDER_CONCURRENCY=1 RENDER_WORKER_HOST=127.0.0.1 RENDER_WORKER_PORT=8001 npm run worker --prefix renderer' > logs/renderer-service.log 2>&1 &
+
+nohup bash -lc 'export PATH=/home/jovyan/work/nebius-speech/.node/bin:$PATH; cd /home/jovyan/work/nebius-app; exec npm run preview --prefix frontend -- --host 127.0.0.1 --port 5173' > logs/frontend-service.log 2>&1 &
 ```
 
-Member 4 should keep renderer output subdirectories group-writable when creating
-them (`umask 0002`). Renderer and API paths must both resolve to `/workspace/output`.
+Before starting a process, inspect whether its port and existing workspace
+process are already present. The `.env` uses `VITE_BASE_PATH=./` so built
+assets resolve under Jupyter's proxy path. Set `VITE_API_BASE_URL=/proxy/8000`
+and `VITE_PREVIEW_HOST` to the current tunnel hostname, then rebuild the
+frontend if these values or the tunnel change. Set `FRONTEND_ORIGIN` to the
+same Jupyter origin for API CORS. The backend and worker both use the absolute
+`ARTIFACT_ROOT=/home/jovyan/work/nebius-app/output`.
 
-From the repository root:
+## Compose deployment option
+
+`infra/compose.yml` and `infra/compose.gpu.yml` define the intended
+five-service deployment for a Docker-capable GPU host. No such standalone VM
+is currently available in the team project. The Devlab container did not have
+Docker installed when inspected. The Compose files are integration source,
+not evidence of a running cloud application.
+
+When the team has an authorized Docker host with GPU access, inspect its
+driver, Docker/Compose, NVIDIA Container Toolkit, disk, ingress, and user
+permissions before deployment. Put the ignored `.env`, actual voice WAVs, and
+character PNGs on that host separately. Prepare the shared artifact directory
+for API UID/GID 10001, then from the repository root:
 
 ```bash
 docker compose --env-file .env -f infra/compose.yml -f infra/compose.gpu.yml config --quiet
 docker compose --env-file .env -f infra/compose.yml -f infra/compose.gpu.yml up -d --build
 docker compose --env-file .env -f infra/compose.yml -f infra/compose.gpu.yml ps
-curl --fail http://localhost:8080/api/health
 ```
 
-Do not paste `docker compose config` output without `--quiet`: interpolation can
-include secrets. Public web ingress is port 8080 by default (`WEB_PORT`), in addition
-to SSH. Internal API, renderer, and speech ports are not published. Set web ingress
-in the existing security group and host firewall as needed after checking current rules.
-For a private demo, use `ssh -L 8080:localhost:8080 ...` instead.
-
-The web image builds with empty `VITE_API_BASE_URL` and proxies same-origin `/api`.
-An external browser therefore does not need access to backend/service ports.
-Only the API reads the complete application `.env`; the renderer and speech workers
-receive their own explicit variables. Provider keys are absent from their environments.
-
-The base Compose file can run without speech containers when using mock modules.
-It still requires Member 4's renderer and Member 5's frontend before a complete build.
-The GPU overlay adds only the two speech containers and persistent model caches.
-Completed artifacts stay on the host disk under `output/` across restarts.
-
-## Current deployment status
-
-Compose configuration is supplied; no cloud connection, container build, GPU
-inference, or cloud video render has been performed. IP assignment and the four
-other implementation branches are required for that acceptance step.
+`config --quiet` avoids printing interpolated secrets. The web service proxies
+same-origin `/api`; only its ingress should be reachable from a demo browser.
+API, renderer, and speech ports remain internal to Compose. Verify readiness,
+actual reference synthesis, alignment, frontend editing, and final Remotion
+render on the target host before calling cloud deployment complete.

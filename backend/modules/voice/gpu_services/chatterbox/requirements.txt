@@ -249,8 +249,10 @@ scipy==1.17.1
     #   librosa
     #   pyloudnorm
     #   scikit-learn
-setuptools==84.0.0
-    # via triton
+setuptools==80.9.0
+    # via
+    #   -r requirements.in
+    #   triton
 shellingham==1.5.4
     # via typer
 soundfile==0.14.0

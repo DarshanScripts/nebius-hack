@@ -296,8 +296,9 @@ class Coordinator:
                 require(outcome.project_id == project_id, "Preview outcome project mismatch")
                 validate_build(outcome.build, context, slot, revision)
                 validate_render(outcome.render, project_id, slot.end_frame - slot.start_frame)
-                require(outcome.render.job_id.startswith(f"{job_id}-a")
-                        and outcome.render.job_id[len(job_id)+2:] in ("0", "1", "2"), "Preview job identity mismatch")
+                expected_job_id = (f"{job_id}-afb" if outcome.build.generation_mode == "fallback"
+                                   else f"{job_id}-a{outcome.build.repair_attempts}")
+                require(outcome.render.job_id == expected_job_id, "Preview job identity mismatch")
                 validate_artifacts(outcome, self.runtime.artifact_root, project_id)
                 async with self.repo.lock(project_id):
                     snapshot = self.repo.get(project_id)

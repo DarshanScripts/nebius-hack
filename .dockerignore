@@ -8,6 +8,7 @@
 .codex
 .bootstrap
 .venv
+.venv-*
 **/node_modules
 **/__pycache__
 **/*.pyc
@@ -16,4 +17,5 @@ assets/voices
 assets/characters
 **/*.log
 .pytest_cache
+.remotion
 .ruff_cache
