@@ -87,3 +87,19 @@
   .sidebar-foot small{font-size:10.5px;white-space:nowrap}
   .foot-arrow{font-size:19px}
 }
+.brand-play{display:none;width:23px;height:23px}.sidebar-rail-nav{display:none}
+@media(min-width:761px){
+  .workspace.sidebar-collapsed .sidebar{padding:12px 10px 18px}
+  .workspace.sidebar-collapsed .brand{gap:12px}
+  .workspace.sidebar-collapsed .brand-mark{width:43px;height:43px;border-radius:11px;background:#bdf789}
+  .workspace.sidebar-collapsed .brand-sparkle{display:none}
+  .workspace.sidebar-collapsed .brand-play{display:block}
+  .workspace.sidebar-collapsed .sidebar-toggle{width:43px;height:42px;color:#a9c1b5;font-size:30px}
+  .workspace.sidebar-collapsed .new-button,.workspace.sidebar-collapsed .sidebar-label,.workspace.sidebar-collapsed .project-list,.workspace.sidebar-collapsed .sidebar-foot{display:none}
+  .workspace.sidebar-collapsed .sidebar-rail-nav{display:flex;flex-direction:column;align-items:center;gap:8px;width:100%}
+  .workspace.sidebar-collapsed .rail-divider{height:1px;width:76px;margin:14px -10px 24px;background:#2b4438}
+  .workspace.sidebar-collapsed .rail-item{display:grid;place-items:center;width:56px;height:58px;color:#9db7a8;background:transparent;border:0;border-radius:13px;padding:0}
+  .workspace.sidebar-collapsed .rail-item:hover{background:#20382a;color:#d4e8d5}
+  .workspace.sidebar-collapsed .rail-item.active{width:76px;height:64px;background:#294c32;color:#e2f2df}
+  .workspace.sidebar-collapsed .rail-item svg{width:25px;height:25px}
+}
