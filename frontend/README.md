@@ -1,6 +1,29 @@
-# Reel Lab editor (member 5)
+# ResearchReel editor
 
 React, Vite, and TypeScript editor for the six-scene reel workflow. The frontend consumes the frozen section 10 API in `plan.md`. It sends no provider requests and reads only `VITE_API_BASE_URL` from the root environment.
+
+## Visual theme
+
+The cinematic theme branch starts from member 1's integrated `11cc617`. The supplied
+reference informs the near-black backgrounds, blue accents, light Inter typography,
+quiet borders, rounded surfaces, and split composition. This applies to the full
+editor: new film, project library, sidebar, research/sources, dialogue/audio, six
+scene slots, corrections, render progress, download, loading, errors, and dialogs.
+
+`src/styles.css` defines shared color tokens for dark (default) and light themes.
+The header theme switch persists the choice locally. Both themes support reduced
+motion, visible keyboard focus, native dialog focus trapping/Escape dismissal,
+independent editor scrolling, and mobile activity/storyboard tabs. Media is shown
+in its original colors; changing the interface does not alter rendered films.
+
+The new-film view offers topic suggestions and an example-topic dialog. Projects
+can be searched and filtered by completion state. The activity trace is expandable
+so it does not push the research and dialogue out of view. All controls use the
+existing API client and revision/timing contracts.
+
+Fonts and the NASA/JPL-Caltech Saturn image are bundled locally; see
+`src/assets/README.md` for attribution. The image is inspiration, not a pre-rendered
+example film. The app makes no external font or image requests.
 
 ## Run
 
@@ -24,10 +47,10 @@ The collapsed sidebar controls have distinct destinations: grid opens the projec
 
 ## Reproduce the acceptance flow
 
-1. Open `/?mock=1` and press **Create reel** with the prefilled topic.
+1. Open `/?mock=1`, enter a topic (or choose a suggestion), and press the circular **Create reel** arrow.
 2. Watch research and sources, twelve dialogue turns, and audio with word timing appear. Expand **Research & sources** and any **Audio & word timing** row.
-3. Watch scene completion events arrive as `3, 1, 6, 2, 5, 4`; the right pane stays numbered `01` through `06`.
-4. Select scene 6 and send the prefilled correction. Its previous preview stays playable while revision 2 runs. Scene 1–5 preview URLs remain unchanged.
+3. Expand **Activity** to see completion events arrive as `3, 1, 6, 2, 5, 4`; the right pane stays numbered `01` through `06`.
+4. Select scene 6, type “Please correct scene six: make the packet diagram clearer”, and send it. Its previous preview stays playable while revision 2 runs. Scene 1–5 preview URLs remain unchanged.
 5. Press **Stitch reel**. Watch progress, download the mock placeholder MP4, then refresh. The project, events, revision, and download link restore from local storage. With the backend, refresh instead loads persisted snapshot/events through `/api`.
 
 An automated Edge/Playwright check exercises the same path. Start the dev server in one terminal, then run:
@@ -40,7 +63,33 @@ npm run smoke:api
 Set `SMOKE_URL` to another frontend origin or `SMOKE_BROWSER` to a Playwright Chromium channel if needed. Browser screenshots are written to ignored `.artifacts/`.
 `smoke:api` uses intercepted HTTP responses to check the real client routes, request body, progressive snapshots, cursor events, and refresh restoration without contacting providers. Run it against the same dev or preview server, without `?mock=1`.
 
-## Checks performed
+## Theme acceptance checks
+
+The production build and both browser checks run against the built preview, with
+headless Microsoft Edge:
+
+```bash
+npm run build
+npm run preview -- --port 5174 --strictPort
+# In a second terminal:
+SMOKE_URL=http://127.0.0.1:5174 npm run smoke
+SMOKE_URL=http://127.0.0.1:5174 npm run smoke:api
+```
+
+The updated smoke flow covers dark/light selection and refresh persistence, topic
+suggestions, dialogs, the empty library, sidebar navigation, project search and
+filters, all six progressive previews, research/audio expansion, scene-six edits,
+Stitch, download, and refresh. It checks no horizontal overflow at desktop, tablet,
+390 px and 320 px widths, with no browser exceptions or API calls in mock mode.
+The HTTP check covers the real client with intercepted responses, including
+loading, a recoverable stage error, and retry.
+
+Screenshots in ignored `.artifacts/theme-*.png` cover the new-film screen, library,
+editor, expanded research/audio, both themes, rendering/download, error/loading,
+and mobile layouts. These tests use fixture media; live inference and final-video
+quality remain backend acceptance checks.
+
+## Earlier integration checks
 
 On 2026-10-18, a clean `npm ci` and `npm run build` passed TypeScript and Vite production compilation. After merging platform seed `d3dfba6`, the build and `npm run smoke` passed again against the built preview in headless Microsoft Edge and reported:
 
@@ -56,7 +105,7 @@ The live API wrapper covers project list/create/read, cursor events, edit, retry
 
 ## Member 1 integration steps
 
-1. Fetch and merge `origin/feat/m5-editor-ui` into the integration branch. This branch already contains platform seed `d3dfba6`; retain the existing root/contract files under member 1 ownership when resolving any later shared-file conflict.
+1. Fetch and merge `origin/feat/m5-cinematic-theme` into the integration branch. The theme is based on integrated commit `11cc617` and only changes frontend files. No backend or schema change is needed.
 2. Build the web image from the repository root with `docker compose --env-file .env -f infra/compose.yml -f infra/compose.gpu.yml up -d --build`. `infra/Dockerfile.web` runs `npm ci` and `npm run build` in `frontend/`. Set `VITE_API_BASE_URL` to empty for the deployed same-origin `/api` proxy. Only this public URL is read by the frontend.
 3. Open the deployed site without `?mock=1`. Create a project with server `MOCK_MODE=true` first and verify six slots, incremental research/dialogue/audio, out-of-order ready previews, a scene-six edit, Stitch, and a refresh. This uses real API persistence and Remotion rendering once members 2–4 are merged. Then repeat with live mode after provider and GPU readiness checks.
 4. Check `GET /api/health`, the browser network calls to `/api/projects`, `/events`, `/edits`, `/stitch`, and byte-range playback/download through `/api/artifacts/{key}`. Keep the final 1800-frame and audible-word checks with the backend/renderer acceptance run.
