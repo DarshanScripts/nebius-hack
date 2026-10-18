@@ -14,13 +14,18 @@ RUN useradd --create-home --uid 10001 renderer && mkdir -p /app/.jobs /workspace
 USER renderer
 WORKDIR /app
 COPY --chown=renderer package.json package-lock.json tsconfig.json ./
-RUN npm ci && npx remotion browser ensure
+RUN npm ci && npx remotion browser ensure \
+  && mkdir -p node_modules/.cache && chmod 1777 /app/.jobs node_modules/.cache
 COPY --chown=renderer src ./src
 
-ENV RENDER_WORKER_PORT=8001 \
+# The image must also run under an arbitrary uid (compose `user:` matching the api service), because
+# api and renderer write into the same shared output volume. Hence world-writable sticky job/cache
+# dirs above, HOME=/tmp (an arbitrary uid has no home), and tsx started directly (no npx/npm cache).
+ENV HOME=/tmp \
+    RENDER_WORKER_PORT=8001 \
     ARTIFACT_ROOT=/workspace/output \
     RENDER_WORK_DIR=/app/.jobs \
     RENDER_CONCURRENCY=1
 EXPOSE 8001
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s CMD node -e "fetch('http://127.0.0.1:8001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-CMD ["npx", "tsx", "src/worker.ts"]
+CMD ["node_modules/.bin/tsx", "src/worker.ts"]
