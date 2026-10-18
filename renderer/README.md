@@ -9,6 +9,7 @@ npm ci
 npm run typecheck && npm test
 ARTIFACT_ROOT=./output RENDER_WORKER_TOKEN=<secret> npm run worker   # :8001
 docker build -t reel-renderer .
+# compose/docker run: use the same uid:gid as the api service (shared output volume), e.g. --user 1000:1000
 ```
 
 Files: `src/scene-kit.tsx` (the only module generated scenes may import), `src/shell.tsx`

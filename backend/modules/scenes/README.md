@@ -108,9 +108,14 @@ Remotion's download), `RENDER_CHROME_CONCURRENCY`, `RENDER_WORK_DIR` (default `r
 `runtime.settings` (either case) then the environment.
 
 Docker: `docker build -t reel-renderer renderer` (Remotion's Debian/Chrome guidance + DejaVu,
-non-root user, healthcheck). Compose (member 1): service `renderer`, port 8001, mount the shared
-volume at `/workspace/output`, pass `RENDER_WORKER_TOKEN`, `RENDER_CONCURRENCY`,
+non-root user, healthcheck; image 1.42 GB). Compose (member 1): service `renderer`, port 8001, mount
+the shared volume at `/workspace/output`, pass `RENDER_WORKER_TOKEN`, `RENDER_CONCURRENCY`,
 `RENDER_JOB_TIMEOUT_SECONDS`; no model credentials.
+
+**Member 1 — required compose setting:** run `renderer` with the **same uid:gid as `api`**
+(e.g. `user: "1000:1000"`). The API creates the scene directories on the shared volume and the
+worker writes `preview.mp4`/`reel.mp4` into them; with the image's default uid 10001 the publish
+step fails with `EACCES` (reproduced). The image is built to run under any uid.
 
 ## Acceptance results (2026-10-18, laptop, mock mode, real Remotion renders)
 
@@ -128,6 +133,7 @@ Snapshot: code as committed after the review fixes. Run `output/demos/scenes-png
 | Audio at joins | silent at 0.0 s (before first utterance), speech at 1.0 s, silent at 8.9 s (scene gap), speech at 17 s / 50 s, silent at 55 s (after 53.7 s) |
 | Character PNGs + boundary (frames 130/138/1340/1353/1366/1500) | inspected: transparent cut-outs over the dot grid, clipped to the bottom region; Sundar slides out / Jensen in at a turn change; s05 board until its fade, empty board at the 1353 cut, s06 fading in; captions follow global turns |
 | Python tests | 70 passed |
+| Same path in the Docker image (`reel-renderer:m4`, `--user 1000:1000`, auth on), run `output/demos/scenes-docker-full/demo-report-20261018-1537.json` | completed: 6 previews in order, s06 edit, fallback, final 1800 frames 1080×1920 30/1 h264 `yuv420p` aac 60.01 s; audio silent/speech at the same points; frames 138/1353/1500 inspected; container env holds no model keys |
 | Renderer tests / typecheck | 8 passed with `OLD_REEL` set (7 + 1 skipped without it; that test proves a full-range file is rejected) / clean |
 
 The silhouette-placeholder variant (no PNGs) was rendered and inspected in run
@@ -147,8 +153,8 @@ with line numbers; syntax errors reported.
   (`output/demos/scenes-live/demo-report-20261018-1440.json`).
 - `tool_calling` mode (create_agent + ToolStrategy) is implemented but unexercised against
   Nemotron; it depends on member 1's capability check.
-- Docker image not built yet (downloads several hundred MB: base image, npm deps, Chrome
-  Headless Shell). Cloud rendering on the Nebius VM is member 1's deployment step.
+- Docker image built and verified locally (see table). Cloud rendering on the Nebius VM is
+  member 1's deployment step; it needs the compose `user:` setting above.
 - Real character PNGs not in the repo yet; the image path is exercised with MOCK transparent PNGs
   (`--character-pngs`), the silhouette placeholder when absent.
 - `context_hash` is not recomputed by the worker (it checks build hashes == context fields);

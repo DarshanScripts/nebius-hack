@@ -92,3 +92,18 @@ working as designed (same project id, different context). Variants use separate 
 
 Process gap, not fixable retroactively: the work was committed in three commits at the end rather
 than as early milestones.
+
+## 2026-10-18 — Docker image built and verified
+
+`docker build -t reel-renderer:m4 renderer` succeeded (1.42 GB; Chrome Headless Shell 157 and
+DejaVu inside). First in-container preview **failed at publish**: `EACCES … copyfile … preview.mp4`.
+Cause: the image runs as uid 10001 but the scene directories on the shared volume are created by
+the API side (here uid 1000), so the worker cannot write into them; the same would happen on the
+VM. Running with `--user 1000:1000` then failed earlier (`EACCES mkdir /app/.jobs/validate-…`),
+because the job dir and webpack cache belonged to uid 10001. Fix: sticky world-writable
+`/app/.jobs` and `node_modules/.cache`, `HOME=/tmp`, tsx started directly instead of `npx`
+(no npm cache under an arbitrary uid). With that, the full mock acceptance path (6 previews, edit,
+fallback, 1800-frame final) completed inside the container as uid 1000; outputs are owned by the
+host user. Compose must set `user:` on the renderer to the api's uid — recorded for member 1.
+Also hit again: reusing an output dir for a different fixture variant is refused by the
+immutability guard; used a fresh dir.
