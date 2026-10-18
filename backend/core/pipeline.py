@@ -121,7 +121,7 @@ class Coordinator:
             # later without replacing the original immutable input snapshot,
             # but only while its scene context has not been locked.
             if (not self.runtime.path(f"projects/{project_id}/context.json").exists()
-                    and all(c.image is None or
+                    and all(c.image is not None or
                             (self.settings.assets_root / f"characters/{c.character_id}.png").is_file()
                             for c in characters)):
                 changed = False

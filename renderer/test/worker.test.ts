@@ -1,19 +1,40 @@
 // Run: npm test  (node:test via tsx). Optional: OLD_REEL=<yuvj420p mp4> exercises the probe on a real bad file.
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import path from 'node:path';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
 import {canonicalJson, InputError, resolveKey} from '../src/artifacts';
 import {checkRequest, outputProblems, probeFrames} from '../src/jobs';
 import {staticCheck} from '../src/source-check';
 import {captionChunks, characterOffset} from '../src/shell';
 import type {TimedTurn} from '../src/scene-kit';
 import type {RenderJobRequest} from '../src/types/contracts';
+import {RENDERER_DIR} from '../src/artifacts';
+
+test('source-check CLI emits JSON and type-checks through the platform-specific dependency link', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'scene-cli-test-'));
+  try {
+    const file = path.join(dir, 'Scene.tsx');
+    await fs.writeFile(file, "import React from 'react';\nexport default function Scene() { return <div style={{fontSize: 36}}>Scene</div>; }\n");
+    const {stdout} = await promisify(execFile)(process.execPath, [
+      path.join(RENDERER_DIR, 'node_modules', 'tsx', 'dist', 'cli.mjs'),
+      path.join(RENDERER_DIR, 'src', 'source-check.ts'), file,
+    ], {timeout: 30000});
+    assert.deepEqual(JSON.parse(stdout.trim()), {valid: true, diagnostics: []});
+  } finally {
+    await fs.rm(dir, {recursive: true, force: true});
+  }
+});
 
 test('resolveKey rejects traversal, absolute and scheme keys', () => {
   process.env.ARTIFACT_ROOT = '/tmp/m4-root';
   for (const k of ['../x', 'a/../../x', '/etc/passwd', 'file:/x', 'a//b', 'a\\b', '']) {
     assert.throws(() => resolveKey(k), InputError, k);
   }
-  assert.equal(resolveKey('projects/p/x.wav'), '/tmp/m4-root/projects/p/x.wav');
+  assert.equal(resolveKey('projects/p/x.wav'), path.resolve('/tmp/m4-root/projects/p/x.wav'));
 });
 
 test('canonicalJson sorts keys recursively', () => {

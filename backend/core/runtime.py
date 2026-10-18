@@ -1,4 +1,4 @@
-"""Artifact IO and the one configured LangChain/Nemotron client."""
+"""Artifact IO and the configured OpenAI-compatible text client."""
 import asyncio
 import hashlib
 import json
@@ -49,7 +49,7 @@ class AppRuntime:
             self._llm = ChatOpenAI(
                 base_url=self._config.nemotron_base_url,
                 api_key=self._config.nemotron_api_key.get_secret_value(),
-                model=self._config.nemotron_model, temperature=0.3, max_tokens=16384,
+                model=self._config.nemotron_model, temperature=0.3, max_tokens=self._config.nemotron_max_tokens,
                 timeout=self._config.nemotron_timeout_seconds, max_retries=1,
             )
         return self._llm
@@ -109,7 +109,7 @@ class AppRuntime:
             except Exception as exc:
                 # Provider exception strings can contain sensitive headers/URLs. Keep public errors generic.
                 raise StageFailure(PipelineError(code="MODEL_REQUEST_FAILED", stage="nemotron",
-                    message="The configured Nemotron request failed; check connectivity/model/account", retryable=True)) from exc
+                    message="The configured text-model request failed; check connectivity/model/account", retryable=True)) from exc
         raise AssertionError("unreachable")
 
     async def report_progress(self, *, project_id: str, job_id: str, stage: str,

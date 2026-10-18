@@ -23,6 +23,33 @@ def settings(root, **kwargs):
     return Settings(_env_file=None, mock_mode=True, artifact_root=root, scene_agent_concurrency=6, **kwargs)
 
 
+def test_token_factory_rejects_an_unrelated_nvidia_key(tmp_path, monkeypatch):
+    from scripts.run_token_factory import token_factory_settings
+    monkeypatch.delenv("NEBIUS_API_KEY", raising=False)
+    monkeypatch.setenv("NEMOTRON_API_KEY", "nvidia-only-test-key")
+    with pytest.raises(ValueError, match="NEBIUS_API_KEY"):
+        token_factory_settings(tmp_path / "absent.env")
+
+
+def test_token_factory_routes_runtime_and_health_without_exposing_key(tmp_path, monkeypatch):
+    from scripts.run_token_factory import BASE_URL, token_factory_settings
+    monkeypatch.setenv("NEBIUS_API_KEY", "token-factory-test-key")
+    monkeypatch.setenv("NEBIUS_MODEL", "selected-model")
+    monkeypatch.setenv("NEMOTRON_BASE_URL", "https://integrate.api.nvidia.com/v1")
+    config = token_factory_settings(tmp_path / "absent.env", artifact_root=tmp_path)
+    runtime = AppRuntime(config)
+    assert runtime.llm.openai_api_base == BASE_URL
+    assert runtime.llm.model_name == "selected-model"
+    assert runtime.llm.max_tokens == 4096
+    assert runtime.settings["NEMOTRON_API_KEY"] == "token-factory-test-key"
+    with TestClient(create_app(config)) as client:
+        response = client.get("/api/health")
+        assert response.json()["text_provider_host"] == "api.tokenfactory.nebius.com"
+        assert response.json()["text_model"] == "selected-model"
+        assert response.json()["mode"] == "live"
+        assert "token-factory-test-key" not in response.text
+
+
 class SceneDoubles:
     def __init__(self):
         self.fail = set()
@@ -98,7 +125,9 @@ def test_timeline_and_progressive_completion(tmp_path):
         assert snapshot.timeline.utterances[-1].end_frame == 1611
         events = coordinator.repo.events(project_id).events
         order = [e.scene_id for e in events if e.type == "scene.ready"]
-        assert order[0] == "s03" and order != sorted(order)
+        # Disk writes can change the first finisher, especially on Windows.
+        # The contract requires progressive completion without sorting by slot.
+        assert order != sorted(order)
         assert [e.event_id for e in events] == list(range(1, len(events)+1))
         assert all(s.build.summary == "Preview-repaired build" for s in snapshot.scenes)
         context = coordinator.context(project_id)

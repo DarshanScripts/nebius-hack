@@ -1,5 +1,6 @@
 import mimetypes
 from typing import Literal
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import FileResponse
@@ -19,7 +20,9 @@ class RetryRequest(Model):
 async def health(request: Request):
     coordinator = request.app.state.coordinator
     return {"status": "ok", "mode": "mock" if coordinator.settings.mock_mode else "live",
-            "structured_mode": coordinator.settings.nemotron_structured_mode}
+            "structured_mode": coordinator.settings.nemotron_structured_mode,
+            "text_provider_host": urlsplit(coordinator.settings.nemotron_base_url).hostname,
+            "text_model": coordinator.settings.nemotron_model}
 
 
 @router.post("/projects", status_code=202)

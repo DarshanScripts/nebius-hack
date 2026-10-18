@@ -6,6 +6,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
+import {fileURLToPath} from 'node:url';
 import ts from 'typescript';
 import {RENDERER_DIR} from './artifacts';
 import type {SourceValidationResult} from './types/contracts';
@@ -110,7 +111,7 @@ export const typeCheck = async (source: string, workRoot = os.tmpdir()): Promise
   const dir = path.join(workRoot, `validate-${randomUUID()}`);
   try {
     await fs.mkdir(path.join(dir, 'src', 'types'), {recursive: true});
-    await fs.symlink(path.join(RENDERER_DIR, 'node_modules'), path.join(dir, 'node_modules'), 'dir');
+    await fs.symlink(path.join(RENDERER_DIR, 'node_modules'), path.join(dir, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
     for (const f of KIT_FILES) await fs.copyFile(path.join(RENDERER_DIR, 'src', f), path.join(dir, 'src', f));
     const file = path.join(dir, 'src', 'Scene.tsx');
     await fs.writeFile(file, source);
@@ -158,7 +159,7 @@ export const validateSource = async (source: string, workRoot?: string): Promise
 };
 
 // CLI: tsx src/source-check.ts <file>  -> prints SourceValidationResult JSON.
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname)) {
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const file = process.argv[2];
   fs.readFile(file, 'utf8')
     .then((src) => validateSource(src, process.argv[3]))

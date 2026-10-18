@@ -155,7 +155,7 @@ export interface PreparedJob {
 export const prepareJob = async (req: RenderJobRequest): Promise<PreparedJob> => {
   const dir = path.join(workDir(), `${req.job_id}-${Date.now()}`);
   await fs.mkdir(path.join(dir, 'src', 'types'), {recursive: true});
-  await fs.symlink(path.join(RENDERER_DIR, 'node_modules'), path.join(dir, 'node_modules'), 'dir');
+  await fs.symlink(path.join(RENDERER_DIR, 'node_modules'), path.join(dir, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
   for (const f of BUNDLE_FILES) await fs.copyFile(path.join(RENDERER_DIR, 'src', f), path.join(dir, 'src', f));
 
   const builds = req.kind === 'final' ? req.builds : [req.build];
@@ -195,11 +195,11 @@ export const prepareJob = async (req: RenderJobRequest): Promise<PreparedJob> =>
 };
 
 // ---------------------------------------------------------------- execution
-const CHILD_ENV_ALLOW = ['PATH', 'HOME', 'TMPDIR', 'LANG', 'LC_ALL', 'LD_LIBRARY_PATH', 'XDG_CACHE_HOME', 'FONTCONFIG_PATH', 'FONTCONFIG_FILE', 'NODE_OPTIONS'];
+const CHILD_ENV_ALLOW = ['PATH', 'HOME', 'TMPDIR', 'TEMP', 'TMP', 'SystemRoot', 'USERPROFILE', 'LOCALAPPDATA', 'LANG', 'LC_ALL', 'LD_LIBRARY_PATH', 'XDG_CACHE_HOME', 'FONTCONFIG_PATH', 'FONTCONFIG_FILE', 'NODE_OPTIONS'];
 export const childEnv = (): NodeJS.ProcessEnv =>
   Object.fromEntries(CHILD_ENV_ALLOW.filter((k) => process.env[k] !== undefined).map((k) => [k, process.env[k]]));
 
-const tsxBin = () => path.join(RENDERER_DIR, 'node_modules', '.bin', 'tsx');
+const tsxEntry = () => path.join(RENDERER_DIR, 'node_modules', 'tsx', 'dist', 'cli.mjs');
 
 export interface ChildOutcome {
   ok: boolean;
@@ -215,7 +215,7 @@ export const runChild = (
   onLine: (msg: Record<string, unknown>) => void,
 ): Promise<ChildOutcome> =>
   new Promise((resolve) => {
-    const child = spawn(tsxBin(), args, {cwd: RENDERER_DIR, env: childEnv(), stdio: ['ignore', 'pipe', 'pipe']});
+    const child = spawn(process.execPath, [tsxEntry(), ...args], {cwd: RENDERER_DIR, env: childEnv(), stdio: ['ignore', 'pipe', 'pipe']});
     let log = '';
     let buf = '';
     let done: ChildOutcome | null = null;
@@ -224,6 +224,10 @@ export const runChild = (
       timedOut = true;
       child.kill('SIGKILL');
     }, timeoutMs);
+    child.on('error', (error) => {
+      clearTimeout(timer);
+      resolve({ok: false, message: `Unable to start render child: ${error.message}`, log});
+    });
     child.stdout.on('data', (d: Buffer) => {
       buf += d.toString();
       let i: number;
@@ -254,7 +258,10 @@ export const runChild = (
 /** FFPROBE_PATH, else the ffprobe bundled with @remotion/compositor, else PATH. */
 const ffprobeBin = (): string => {
   if (process.env.FFPROBE_PATH) return process.env.FFPROBE_PATH;
-  const bundled = path.join(RENDERER_DIR, 'node_modules', '@remotion', `compositor-${process.platform}-${process.arch}-gnu`, 'ffprobe');
+  const packageName = process.platform === 'win32' ? `compositor-win32-${process.arch}-msvc`
+    : process.platform === 'darwin' ? `compositor-darwin-${process.arch}`
+    : `compositor-${process.platform}-${process.arch}-gnu`;
+  const bundled = path.join(RENDERER_DIR, 'node_modules', '@remotion', packageName, process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe');
   return existsSync(bundled) ? bundled : 'ffprobe';
 };
 
@@ -378,4 +385,3 @@ export const executeJob = async (rec: JobRecord): Promise<void> => {
     if (job && !keepDirs) await fs.rm(job.dir, {recursive: true, force: true});
   }
 };
-

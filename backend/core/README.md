@@ -7,6 +7,49 @@ JSON Schemas are exported under `contracts/schema/`.
 
 ## Run locally
 
+### Nebius Token Factory
+
+The Token Factory runner uses the existing OpenAI-compatible `AppRuntime` and
+frozen module interfaces. It selects `https://api.tokenfactory.nebius.com/v1`
+and `Qwen/Qwen3-30B-A3B-Instruct-2507` (available in the account's model list).
+It reads `NEBIUS_API_KEY` and optional `NEBIUS_MODEL` from the private `.env` or
+environment. The API key never enters the frontend or render-worker environment.
+Existing `NEMOTRON_*` names remain internal compatibility names, not a second
+model call.
+
+```bash
+uv sync --python 3.12
+uv run python -m scripts.run_token_factory --check
+uv run python -m scripts.run_token_factory --port 8010
+# frontend, separate terminal:
+# VITE_API_BASE_URL= VITE_API_PROXY_TARGET=http://127.0.0.1:8010 npm run dev -- --port 5178
+```
+
+Use `--env-file <path>` to reuse an existing private environment file from an
+isolated checkout. The runner forces live mode, single-call scene drafting, JSON
+structured output, a 90-second model timeout, and a 4096-token output limit.
+`--check` performs real JSON and tool-call probes through `AppRuntime` and saves
+sanitized results in ignored `output/capabilities/token-factory.json`.
+`GET /api/health` reports `text_provider_host` and `text_model`, without secrets.
+
+The endpoint and both structured modes passed actual requests; real dialogue
+generation produced 12 alternating turns / 127 words in 15.38 seconds.
+Token Factory also generated real scene source which passed TypeScript validation
+and rendered a 270-frame, 1080×1920, 30 fps H.264/AAC MP4. That isolated scene
+used fixture research/audio/characters; it is not proof of a complete live reel.
+Windows renderer child-process, dependency-junction and validator-entry fixes are
+included, alongside the missing-character retry fix already present in the
+other local integration work. Core checks passed (17; the Windows symlink
+privilege check was excluded), renderer checks passed (8, one optional media
+fixture skipped), and both editor browser checks passed.
+Rendering and GPU speech remain separate services: Token Factory does not
+replace Chatterbox/WhisperX. The local speech endpoints and real reference
+assets still need connecting before a full live project can finish.
+
+The hackathon recording prompt is in `scripts/demo-video-prompt.md`.
+
+### Existing direct API launch
+
 ```bash
 uv sync --python 3.12
 # Copy .env.example to .env only if .env does not already exist.

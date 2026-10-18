@@ -5,7 +5,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '..', 'VITE_')
   // Same-origin local development and preview: /api reaches the real FastAPI
   // process. Production deployments continue to use their nginx/Jupyter proxy.
-  const proxy = { '/api': { target: 'http://127.0.0.1:8000', changeOrigin: true } }
+  const proxy = { '/api': { target: env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8000', changeOrigin: true } }
   return {
     envDir: '..',
     base: env.VITE_BASE_PATH || '/',
