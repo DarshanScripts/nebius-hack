@@ -34,18 +34,29 @@ An automated Edge/Playwright check exercises the same path. Start the dev server
 
 ```bash
 npm run smoke
+npm run smoke:api
 ```
 
 Set `SMOKE_URL` to another frontend origin or `SMOKE_BROWSER` to a Playwright Chromium channel if needed. Browser screenshots are written to ignored `.artifacts/`.
+`smoke:api` uses intercepted HTTP responses to check the real client routes, request body, progressive snapshots, cursor events, and refresh restoration without contacting providers. Run it against the same dev or preview server, without `?mock=1`.
 
 ## Checks performed
 
-On 2026-10-18, a clean `npm ci` and `npm run build` passed TypeScript and Vite production compilation. `npm run smoke` passed against the built preview in headless Microsoft Edge and reported:
+On 2026-10-18, a clean `npm ci` and `npm run build` passed TypeScript and Vite production compilation. After merging platform seed `d3dfba6`, the build and `npm run smoke` passed again against the built preview in headless Microsoft Edge and reported:
 
 ```json
 {"slots":[1,2,3,4,5,6],"completion_order":[3,1,6,2,5,4],"scene_6_revision":2,"other_preview_urls_unchanged":true,"stitch_download":true,"refresh_restored":true,"mobile_navigation":true,"api_requests":0}
 ```
 
+`npm run smoke:api` passed with `{"http_create":true,"progressive_snapshot":true,"refresh_restored":true,"event_deduplicated":true,"scene_slots":6}`. This tests the browser against a contract-shaped HTTP fixture, not the running FastAPI service.
+
 ## Integration boundary
 
-The live API wrapper covers project list/create/read, cursor events, edit, retry, Stitch, and encoded artifact URLs. Its routes and request bodies were compared with `origin/feat/m1-platform` on 2026-10-18. That platform branch is not yet merged into `main`; a real backend round trip, persistence across an API restart, and real MP4/audio acceptance remain for integration. The UI expects the exact snake_case fields and revision lifecycle from `plan.md`; no shared contract change is requested. The selected NVIDIA Nemotron endpoint is server configuration and is never called or configured in the browser.
+The live API wrapper covers project list/create/read, cursor events, edit, retry, Stitch, and encoded artifact URLs. Its routes and request bodies were compared with the platform API on 2026-10-18. Platform seed `d3dfba6` is now an ancestor of this branch, but the team modules are not yet integrated on `main`. A real backend round trip, persistence across an API restart, and real MP4/audio acceptance remain for integration. The UI expects the exact snake_case fields and revision lifecycle from `plan.md`; no shared contract change is requested. The selected NVIDIA Nemotron endpoint is server configuration and is never called or configured in the browser.
+
+## Member 1 integration steps
+
+1. Fetch and merge `origin/feat/m5-editor-ui` into the integration branch. This branch already contains platform seed `d3dfba6`; retain the existing root/contract files under member 1 ownership when resolving any later shared-file conflict.
+2. Build the web image from the repository root with `docker compose --env-file .env -f infra/compose.yml -f infra/compose.gpu.yml up -d --build`. `infra/Dockerfile.web` runs `npm ci` and `npm run build` in `frontend/`. Set `VITE_API_BASE_URL` to empty for the deployed same-origin `/api` proxy. Only this public URL is read by the frontend.
+3. Open the deployed site without `?mock=1`. Create a project with server `MOCK_MODE=true` first and verify six slots, incremental research/dialogue/audio, out-of-order ready previews, a scene-six edit, Stitch, and a refresh. This uses real API persistence and Remotion rendering once members 2–4 are merged. Then repeat with live mode after provider and GPU readiness checks.
+4. Check `GET /api/health`, the browser network calls to `/api/projects`, `/events`, `/edits`, `/stitch`, and byte-range playback/download through `/api/artifacts/{key}`. Keep the final 1800-frame and audible-word checks with the backend/renderer acceptance run.
