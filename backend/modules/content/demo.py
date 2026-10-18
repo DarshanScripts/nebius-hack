@@ -48,7 +48,8 @@ class DemoRuntime:
         if not mock:
             from langchain_openai import ChatOpenAI
             self.llm = ChatOpenAI(base_url=settings["NEMOTRON_BASE_URL"], api_key=settings["NEMOTRON_API_KEY"],
-                                  model=settings["NEMOTRON_MODEL"], temperature=0.4,
+                                  model=settings["NEMOTRON_MODEL"], temperature=0.3, max_tokens=16384,
+                                  max_retries=3,  # SDK backoff for transient 429/5xx (seen live: NVIDIA 500)
                                   timeout=float(settings.get("NEMOTRON_TIMEOUT_SECONDS", 180)))
 
     def path(self, key: str) -> Path:
@@ -82,7 +83,11 @@ class DemoRuntime:
                             + json.dumps(schema.model_json_schema())}]
         err = ""
         for _ in range(3):
-            reply = await self.llm.ainvoke(msgs)
+            try:
+                reply = await self.llm.ainvoke(msgs)
+            except Exception as exc:  # same mapping as core's AppRuntime; provider text can carry headers/URLs
+                raise StageFailure(PipelineError(code="MODEL_REQUEST_FAILED", stage="nemotron", retryable=True,
+                                                 message=f"Nemotron request failed ({type(exc).__name__})")) from exc
             text = reply.content if isinstance(reply.content, str) else "".join(
                 p.get("text", "") for p in reply.content if isinstance(p, dict))
             text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
@@ -98,16 +103,21 @@ class DemoRuntime:
         return None
 
 
+async def _write_once(rt: DemoRuntime, key: str, model) -> None:
+    # A rerun of the same --project-id reuses saved Tavily results but gets fresh LLM output; keep the first copy.
+    if not rt.path(key).exists():
+        await rt.write_json(key, model.model_dump(mode="json"))
+
+
 async def main(args: argparse.Namespace) -> int:
     settings = _load_env(Path(".env"))
     rt = DemoRuntime(Path(args.output), args.mock, settings)
     research = await run_research(ResearchRequest(project_id=args.project_id, topic=args.topic), rt)
-    await rt.write_json(f"projects/{args.project_id}/research/bundle.json", research.model_dump(mode="json"))  # as core does
+    await _write_once(rt, f"projects/{args.project_id}/research/bundle.json", research)  # as core does
     print(f"research: {len(research.sources)} sources, {len(research.claims)} claims, mock={research.is_mock}, "
           f"request_id={research.tavily_request_id}")
     script = await generate_dialogue(DialogueRequest(project_id=args.project_id, research=research, characters=CHARACTERS), rt)
-    await rt.write_json(f"projects/{args.project_id}/script/v{script.script_revision}/script.json",
-                        script.model_dump(mode="json"))  # as core does
+    await _write_once(rt, f"projects/{args.project_id}/script/v{script.script_revision}/script.json", script)  # as core does
     words = sum(checks.word_count(t.text) for t in script.turns)
     print(f"dialogue: rev {script.script_revision}, {len(script.turns)} turns, {words} words, title={script.title!r}")
     for t in script.turns:
