@@ -267,3 +267,55 @@ def test_over_budget_after_resynthesis_reports_actual_speed(tmp_path, monkeypatc
         run(go())
     assert exc.value.error.code == "AUDIO_DURATION_OUT_OF_RANGE"
     assert "at 1.0x speed" in exc.value.error.message
+
+
+# ---------------------------------------------------------------- immutable artifacts / retries
+
+
+def test_mock_rerun_reuses_the_completed_bundle(tmp_path):
+    script, chars = load_inputs(live=False)
+    runtime = FakeRuntime(tmp_path, mock_mode=True)
+    req = VoiceRequest(project_id=script.project_id, script=script, characters=chars)
+    first = run(synthesize_dialogue(req, runtime))
+    second = run(synthesize_dialogue(req, runtime))
+    assert second == first
+    assert not runtime.path("projects/demo-whatsapp-001/voice/v1/attempt-2").exists()
+
+
+def test_live_rerun_after_success_reuses_without_new_gpu_work(tmp_path, monkeypatch):
+    chatterbox = FakeChatterbox(0.3)
+    install_services(monkeypatch, chatterbox, FakeAligner())
+    runtime = live_runtime(tmp_path)
+
+    async def go():
+        req, _ = await live_request(runtime)
+        return await synthesize_dialogue(req, runtime), await synthesize_dialogue(req, runtime)
+
+    first, second = run(go())
+    assert second == first and len(chatterbox.calls) == 12
+
+
+def test_live_retry_after_partial_write_uses_a_fresh_attempt_directory(tmp_path, monkeypatch):
+    install_services(monkeypatch, FakeChatterbox(0.3), FakeAligner())
+    runtime = live_runtime(tmp_path)
+    leftover = runtime.path("projects/demo-whatsapp-001/voice/v1/d001/audio.wav")
+    leftover.parent.mkdir(parents=True)
+    leftover.write_bytes(b"half-written clip from an interrupted run")
+
+    async def go():
+        req, script = await live_request(runtime)
+        return await synthesize_dialogue(req, runtime), script
+
+    bundle, script = run(go())
+    assert all(u.wav.key.startswith("projects/demo-whatsapp-001/voice/v1/attempt-2/") for u in bundle.utterances)
+    assert runtime.path("projects/demo-whatsapp-001/voice/v1/attempt-2/bundle.json").is_file()
+    assert validate_bundle(bundle, script, runtime) == []
+    assert leftover.read_bytes() == b"half-written clip from an interrupted run"  # never overwritten
+
+
+def test_runtime_refuses_to_change_an_existing_artifact(tmp_path):
+    runtime = FakeRuntime(tmp_path, mock_mode=True)
+    run(runtime.write_bytes("projects/p/a.bin", b"one", "application/octet-stream"))
+    run(runtime.write_bytes("projects/p/a.bin", b"one", "application/octet-stream"))  # identical rewrite is fine
+    with pytest.raises(ValueError):
+        run(runtime.write_bytes("projects/p/a.bin", b"two", "application/octet-stream"))

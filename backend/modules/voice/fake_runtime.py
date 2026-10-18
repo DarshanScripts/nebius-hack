@@ -34,6 +34,10 @@ class FakeRuntime:
 
     def _write(self, key: str, data: bytes, media_type: str) -> ArtifactRef:
         target = self.path(key)
+        if target.exists():  # same rule as the platform runtime: artifacts are immutable, identical rewrites are fine
+            if target.read_bytes() != data:
+                raise ValueError(f"Refusing to overwrite immutable artifact: {key}")
+            return ArtifactRef(key=key, media_type=media_type, sha256=hashlib.sha256(data).hexdigest(), size_bytes=len(data))
         target.parent.mkdir(parents=True, exist_ok=True)
         fd, tmp = tempfile.mkstemp(dir=target.parent, suffix=".tmp")
         with os.fdopen(fd, "wb") as fh:

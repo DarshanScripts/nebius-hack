@@ -4,7 +4,8 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[4]
-for candidate in (ROOT, ROOT / ".bootstrap"):
+# Prefer the real shared contracts; fall back to the ignored bootstrap copy only if they are absent.
+for candidate in (ROOT / ".bootstrap", ROOT) if not (ROOT / "contracts").is_dir() else (ROOT,):
     if candidate.exists() and str(candidate) not in sys.path:
         sys.path.insert(0, str(candidate))
 
