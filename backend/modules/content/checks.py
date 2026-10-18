@@ -7,6 +7,7 @@ from contracts.models import Claim, DialogueScript, ImageBundle, ResearchBundle
 
 SPEAKERS = ("sundar", "jensen")
 MIN_WORDS, MAX_WORDS = 110, 145  # target 120-135; small tolerance before forcing a repair
+ACRONYM = re.compile(r"\b[A-Z][A-Z0-9]{1,}\b")
 STAGE_DIRECTION = re.compile(r"\[[^\]]*\]|\([^)]*\)|\*[^*]+\*|^\s*(sundar|jensen|pichai|huang)\b[^:]{0,20}:", re.I)
 
 
@@ -48,6 +49,11 @@ def script_problems(script: DialogueScript, research: ResearchBundle) -> list[st
         if t.intent != "question" and not t.text.rstrip().endswith("?") and not t.claim_ids:
             problems.append(f"{t.dialogue_id} ({t.intent}) states something, so it must cite at least one claim_id "
                             "(only questions or turns ending with '?' may cite none)")
+        if t.speaker_id == "jensen" and (t.intent == "question" or t.text.rstrip().endswith("?")):
+            problems.append(f"{t.dialogue_id} is Jensen's turn; it must answer {SPEAKERS[0]}'s previous turn, not ask a question")
+        acronyms = sorted(set(ACRONYM.findall(t.text)))
+        if len(acronyms) > 1:
+            problems.append(f"{t.dialogue_id} uses several acronyms {acronyms}; use plain words, at most one explained term")
         if STAGE_DIRECTION.search(t.text):
             problems.append(f"{t.dialogue_id} contains stage directions or a speaker label; spoken words only")
     total = sum(word_count(t.text) for t in script.turns)

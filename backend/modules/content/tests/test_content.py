@@ -26,6 +26,8 @@ def runtime(tmp_path, mock=True, replies=None):
     async def structured(*, messages, schema):
         calls.append(messages)
         reply = replies.pop(0)
+        if isinstance(reply, Exception):
+            raise reply
         return schema.model_validate(reply)
     rt.structured = structured
     rt.calls = calls
@@ -99,8 +101,6 @@ def test_live_research_polls_normalizes_and_repairs(tmp_path, monkeypatch):
     assert [c.claim_id for c in b.claims] == ["c001", "c002", "c003", "c004"]
     assert "## Overview" in b.report_markdown and not b.is_mock
     assert "src099" in rt.calls[1][-1]["content"]  # repair prompt names the problem
-    # Tavily's 3rd entry was a duplicate and the 4th was dropped; citation numbers must survive renumbering.
-    assert "src002 = report [2]" in rt.calls[0][1]["content"]
     assert json.loads(rt.path(b.raw_response.key).read_text())["status"] == "completed"
     assert rt.path(f"projects/{PID}/research/initial.json").exists()
 
@@ -216,9 +216,13 @@ def test_live_find_images_downloads_and_handles_failures(tmp_path, monkeypatch):
         return True
     monkeypatch.setattr(images, "_public_host", public)
     plan = {"queries": [{"scene_index": i, "dialogue_ids": [], "query": f"scene{i}", "reason": "r"} for i in range(6, 0, -1)]}
-    rt = runtime(tmp_path, mock=False, replies=[plan])
+    # Ranking: scene 6's only candidate is judged irrelevant; scene 5 skipped by the model -> search order.
+    ranking = {"scenes": [{"scene_index": i, "ranked": [1]} for i in (1, 2, 4)] + [{"scene_index": 6, "ranked": []}]}
+    rt = runtime(tmp_path, mock=False, replies=[plan, ranking])
     b = asyncio.run(service.find_images(ImageRequest(project_id=PID, research=research, script=script), rt))
-    assert [s.status for s in b.selections] == ["selected", "selected", "unavailable", "unavailable", "selected", "selected"]
+    assert [s.status for s in b.selections] == ["selected", "selected", "unavailable", "unavailable", "selected", "unavailable"]
+    assert b.selections[5].reason == "no relevant image among search results"
+    assert "candidate images" in rt.calls[1][0]["content"] and "[1] a diagram (img.example)" in rt.calls[1][1]["content"]
     assert b.selections[0].query.dialogue_ids == ["d001", "d002"] and b.selections[0].source_page_url is None
     assert "search failed" in b.selections[2].reason and "no usable image" in b.selections[3].reason
     assert rt.path(b.selections[0].asset.key).read_bytes() == png()
@@ -300,12 +304,16 @@ def test_live_images_retry_uses_fresh_attempt_folder(tmp_path, monkeypatch):
     monkeypatch.setattr(images, "_public_host", public)
     plan = lambda tag: {"queries": [{"scene_index": i, "dialogue_ids": [], "query": f"{tag}{i}", "reason": "r"}
                                     for i in range(1, 7)]}
-    rt = runtime(tmp_path, mock=False, replies=[plan("a"), plan("b")])
+    from contracts.models import PipelineError
+    failed = StageFailure(PipelineError(code="MODEL_REQUEST_FAILED", stage="nemotron", message="x"))
+    rt = runtime(tmp_path, mock=False, replies=[plan("a"), {"scenes": []}, plan("b"), failed])
     req = ImageRequest(project_id=PID, research=research, script=script)
     first = asyncio.run(service.find_images(req, rt))
     second = asyncio.run(service.find_images(req, rt))  # immutable runtime would raise if keys were reused
     assert first.selections[0].asset.key.endswith("/v1/a1/s01.png")
     assert second.selections[0].asset.key.endswith("/v1/a2/s01.png")
+    # Empty ranking (scenes skipped) and a failed ranking call both fall back to search order.
+    assert all(s.status == "selected" for s in first.selections + second.selections)
 
 
 def test_mock_outputs_pass_core_validators(tmp_path):
@@ -316,3 +324,23 @@ def test_mock_outputs_pass_core_validators(tmp_path):
     validation.validate_script(script, research)
     validation.validate_images(imgs, script)
     validation.validate_artifacts(imgs, rt.artifact_root, PID)
+
+
+def test_report_citations_follow_reference_list_not_sources_order():
+    # Real Tavily response (2026-10-18): its sources array is in a different order from the report's [n] list.
+    raw = json.loads((service.FIXTURES / "tavily_live_sample.json").read_text())
+    sources = service._index_sources(raw["sources"])
+    cites = service._report_citations(raw["content"], sources)
+    mlow = next(s for s in sources if "mlow" in s.url)
+    assert len(cites) == len(sources) and cites[mlow.source_id] == [12] and mlow.source_id == "src015"
+    twice = raw["content"] + "\n[99] " + mlow.url + "\n"
+    assert service._report_citations(twice, sources)[mlow.source_id] == [12, 99]
+
+
+def test_acronym_lists_are_sent_back_for_repair(tmp_path):
+    _, research, script = mock_bundle(tmp_path)
+    bad = script.model_copy(deep=True)
+    bad.turns[3].text = "WebRTC or SDES SRTP media using OPUS PCMA or PCMU."
+    assert any("acronyms" in p for p in checks.script_problems(bad, research))
+    bad.turns[3].text = "But why would anyone trust that?"
+    assert any("must answer" in p for p in checks.script_problems(bad, research))

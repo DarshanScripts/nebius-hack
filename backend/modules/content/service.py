@@ -9,8 +9,10 @@ import asyncio
 import hashlib
 import io
 import json
+import re
 from pathlib import Path
 from typing import Any, Callable, Literal, TypeVar
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -82,12 +84,10 @@ async def _structured_checked(
 
 # ---------------------------------------------------------------- research
 
-def _index_sources(raw_sources: Any) -> tuple[list[Source], list[int]]:
-    """Returns sources and, per source, its 1-based position in Tavily's list (the report's [n] citation)."""
+def _index_sources(raw_sources: Any) -> list[Source]:
     sources: list[Source] = []
-    refs: list[int] = []
     seen: set[str] = set()
-    for pos, item in enumerate(raw_sources if isinstance(raw_sources, list) else [], start=1):
+    for item in raw_sources if isinstance(raw_sources, list) else []:
         if not isinstance(item, dict):
             continue
         url = item.get("url")
@@ -97,8 +97,28 @@ def _index_sources(raw_sources: Any) -> tuple[list[Source], list[int]]:
         title = item.get("title") if isinstance(item.get("title"), str) and item["title"].strip() else url
         favicon = item.get("favicon") if isinstance(item.get("favicon"), str) else None
         sources.append(Source(source_id=f"src{len(sources) + 1:03d}", title=title, url=url, favicon=favicon))
-        refs.append(pos)
-    return sources, refs
+    return sources
+
+
+def _url_key(url: str) -> str:
+    parts = urlsplit(url.strip())
+    host = (parts.hostname or "").lower().removeprefix("www.")
+    return f"{host}{parts.path.rstrip('/')}" + (f"?{parts.query}" if parts.query else "")
+
+
+REFERENCE_LINE = re.compile(r"^\s*\[(\d{1,3})\]\s*[:.-]?\s*.*?(https?://\S+)", re.M)
+
+
+def _report_citations(report: str, sources: list[Source]) -> dict[str, list[int]]:
+    """source_id -> the report's own [n]. Tavily's sources array is NOT in the report's reference order
+    (seen live: report [12] was sources[15]), so match the report's reference list by URL."""
+    by_url = {_url_key(s.url): s.source_id for s in sources}
+    found: dict[str, list[int]] = {}
+    for n, url in REFERENCE_LINE.findall(report):
+        sid = by_url.get(_url_key(url.rstrip(").,>]")))
+        if sid and int(n) not in found.setdefault(sid, []):
+            found[sid].append(int(n))  # the same URL can carry several reference numbers
+    return found
 
 
 def _to_markdown(content: Any, depth: int = 2) -> str:
@@ -113,6 +133,8 @@ def _to_markdown(content: Any, depth: int = 2) -> str:
 
 
 RESEARCH_GUIDANCE = (
+    "Explain how this works for ordinary end users of the product; use developer or business-API documentation "
+    "only as supporting evidence unless the question is about it. "
     "Prioritize official engineering blogs, security whitepapers and relevant standards (IETF/RFCs). "
     "Clearly separate documented product behavior, general industry practice and inference. "
     "Do not state undocumented specifics (exact codecs, topology, regions, vendors) as fact; say they are unknown."
@@ -121,7 +143,8 @@ RESEARCH_GUIDANCE = (
 NOTES_SYSTEM = (
     "You turn a research report into citable claims for a 60-second educational video. "
     "Use only the sources given; every claim cites at least one of their source_ids. A report citation [n] "
-    "refers to the source listed as 'report [n]'. "
+    "refers to the source listed as 'report [n]'; never guess a source from list position. "
+    "Write claims in plain words a curious non-engineer understands; name a technical term only when needed. "
     "evidence_type: 'documented' only when a cited source states it about this product; "
     "'general_industry_practice' for how such systems usually work; 'inference' otherwise, always with a caveat. "
     "Never present an undocumented proprietary detail (exact codec, topology, region, vendor) as documented. "
@@ -130,10 +153,11 @@ NOTES_SYSTEM = (
 )
 
 
-async def _research_notes(runtime: Runtime, topic: str, report: str, sources: list[Source],
-                          refs: list[int]) -> ResearchNotes:
+async def _research_notes(runtime: Runtime, topic: str, report: str, sources: list[Source]) -> ResearchNotes:
     source_ids = {s.source_id for s in sources}
-    listing = "\n".join(f"{s.source_id} = report [{n}] | {s.title} | {s.url}" for s, n in zip(sources, refs))
+    cites = _report_citations(report, sources)
+    listing = "\n".join(f"{s.source_id}" + (" = report " + ", ".join(f"[{n}]" for n in cites[s.source_id]) if s.source_id in cites else "")
+                        + f" | {s.title} | {s.url}" for s in sources)
     messages = [
         {"role": "system", "content": NOTES_SYSTEM},
         {"role": "user", "content": f"Topic: {topic}\n\nSources:\n{listing}\n\nReport:\n{report[:MAX_REPORT_CHARS]}"},
@@ -206,7 +230,7 @@ async def run_research(request: ResearchRequest, runtime: Runtime) -> ResearchBu
         d = _attempt_dir(runtime, base)
         raw = await _tavily_raw(request, runtime, d)
 
-    sources, refs = _index_sources(raw.get("sources"))
+    sources = _index_sources(raw.get("sources"))
     report = _to_markdown(raw.get("content")).strip()
     if not sources or not report:
         error = _fail("research", "RESEARCH_NO_SOURCES" if not sources else "RESEARCH_EMPTY",
@@ -220,7 +244,7 @@ async def run_research(request: ResearchRequest, runtime: Runtime) -> ResearchBu
     if runtime.mock_mode:
         notes = ResearchNotes.model_validate(_fixture("research_notes.json"))
     else:
-        notes = await _research_notes(runtime, request.topic, report, sources, refs)
+        notes = await _research_notes(runtime, request.topic, report, sources)
 
     raw_ref = _ref_for(runtime, f"{d}/raw.json")
     bundle = ResearchBundle(
@@ -265,9 +289,12 @@ Rules:
 - Exactly 12 turns alternating sundar, jensen, sundar, ... (sundar first). Turns 1-2 form scene 1, 3-4 scene 2, ... 11-12 scene 6.
 - 120 to 135 spoken words in total. Short hook first, then skeptical questions, concise explanations,
   at least one challenge/correction, and a closing takeaway (intent "takeaway") in turn 12.
-- intent is one of hook, question, answer, challenge, takeaway.
+- intent is one of hook, question, answer, challenge, takeaway. Sundar (odd turns) asks or challenges; Jensen (even turns)
+  never asks a question: each Jensen turn directly answers or corrects the Sundar turn just before it.
 - Only state facts found in the claims below and put their claim_ids on that turn. Every turn that is not a question
   (hook, answer, challenge, takeaway) cites at least one claim unless its text ends with "?". Keep caveats: never present an inference or unknown proprietary detail as fact.
+- Audience: curious non-engineers scrolling Instagram. Plain, natural spoken sentences, never lists of terms.
+  At most one technical term or acronym per turn, explained in everyday words in the same turn. 6 to 18 words per turn.
 - Spoken words only: no stage directions, brackets, parentheses, emojis, speaker labels or markdown.
   Write numbers and acronyms the way they should be spoken.
 - title: a short reel title (max 8 words).
@@ -322,8 +349,9 @@ async def generate_dialogue(request: DialogueRequest, runtime: Runtime) -> Dialo
 
 IMAGE_PLAN_SYSTEM = """You plan one web image search per scene of a 6-scene educational reel.
 For each scene_index 1-6 write one specific query (4-10 words) for a clear, relevant photo or diagram that
-illustrates that scene's two dialogue turns, plus a one-sentence reason. Prefer diagrams, devices and
-infrastructure over people or logos. dialogue_ids are that scene's two turn ids. Return JSON only."""
+illustrates that scene's two dialogue turns, plus a one-sentence reason. Use plain concept words, not protocol
+acronyms, and always include the product or topic name so the query cannot match another meaning of a word
+(write "WhatsApp call relay server diagram", not "relay diagram"). Prefer diagrams, devices and infrastructure over people or logos. dialogue_ids are that scene's two turn ids. Return JSON only."""
 
 
 def _scene_ids(script: DialogueScript, index: int) -> list[str]:
@@ -349,35 +377,86 @@ async def _plan_queries(request: ImageRequest, runtime: Runtime) -> list[ImageQu
         plan, problems = await _structured_checked(runtime, messages, ImageQueryPlan, check)
         if not problems:
             return _normalize_plan(plan, script)
-    except StageFailure:
-        pass
+        why = "; ".join(problems)
+    except StageFailure as exc:
+        why = f"{exc.error.code}: {exc.error.message}"
     # Planning is a nicety; fall back to queries built from the scene text instead of failing images.
+    # The reason lands in plan.json via ImageQuery.reason so a weak image run can be explained afterwards.
+    topic = request.research.topic.rstrip("?. ")
     return [ImageQuery(scene_index=i, dialogue_ids=_scene_ids(script, i),
-                       query=f"{request.research.topic} {next(t.text for t in script.turns if t.scene_index == i and t.speaker_id == 'jensen')}"[:300],
-                       reason="Deterministic fallback query: image-query planning failed validation")
+                       query=f"{topic} {next(t.text for t in script.turns if t.scene_index == i and t.speaker_id == 'jensen')}"[:300],
+                       reason=f"Deterministic fallback query; planning failed: {why}"[:500])
             for i in range(1, 7)]
 
 
-async def _select_live(query: ImageQuery, runtime: Runtime, base: str, search_client, dl_client) -> ImageSelection:
-    sid = f"s{query.scene_index:02d}"
+async def _search(query: ImageQuery, runtime: Runtime, base: str, client) -> list[images.Candidate] | str:
+    """Candidates for one scene, or the reason there are none."""
     try:
-        result = await tavily.search_images(search_client, query.query)
+        result = await tavily.search_images(client, query.query)
     except StageFailure as exc:
-        return ImageSelection(query=query, status="unavailable", reason=f"search failed: {exc.error.message}")
-    await runtime.write_json(f"{base}/search/{sid}.json", result)
+        return f"search failed: {exc.error.message}"
+    await runtime.write_json(f"{base}/search/s{query.scene_index:02d}.json", result)
+    return images.candidates(result)[:CANDIDATES_PER_SCENE] or "no image results"
+
+
+class _SceneRank(BaseModel):
+    scene_index: int = Field(ge=1, le=6)
+    ranked: list[int] = Field(default_factory=list,
+                              description="Fitting candidates, best first, using the 1-based [k] numbers shown; [] if none fits")
+
+
+class _ImageRanking(BaseModel):
+    scenes: list[_SceneRank]
+
+
+RANK_SYSTEM = """You choose images for scenes of an educational reel. For each scene you get its dialogue and
+numbered candidate images (descriptions from a search engine). Return, per scene_index, the fitting candidates'
+1-based [k] numbers, best first. A candidate fits when it is about this topic (this product's calls, devices or
+infrastructure) and does not contradict the scene; a general on-topic diagram fits when nothing more specific exists.
+Reject only: other meanings of a word (an electrical relay, an office phone system), stock photos of people, logos,
+and screenshots of unrelated apps. Most scenes should get at least one image; return [] only when every candidate is
+off-topic. Return JSON only."""
+
+
+async def _rank(runtime: Runtime, request: ImageRequest, cands: dict[int, list[images.Candidate]]) -> dict[int, list[int]]:
+    """One LLM call per project re-orders each scene's candidates by relevance. On failure: Tavily's order."""
+    blocks = []
+    for i, cs in cands.items():
+        lines = " / ".join(t.text for t in request.script.turns if t.scene_index == i)
+        listing = "\n".join(f"  [{k}] {c.description or 'no description'} ({urlsplit(c.image_url).hostname})"
+                            for k, c in enumerate(cs, start=1))
+        blocks.append(f"scene {i}: {lines}\n{listing}")
+    messages = [{"role": "system", "content": RANK_SYSTEM},
+                {"role": "user", "content": f"Topic: {request.research.topic}\n\n" + "\n\n".join(blocks)}]
+    try:
+        ranking = await runtime.structured(messages=messages, schema=_ImageRanking)
+    except StageFailure:
+        return {i: list(range(len(cs))) for i, cs in cands.items()}
+    given = {r.scene_index: r.ranked for r in ranking.scenes}
+    order = {}
+    for i, cs in cands.items():
+        if i not in given:  # model skipped the scene: keep search order rather than guess "none"
+            order[i] = list(range(len(cs)))
+        else:
+            order[i] = list(dict.fromkeys(k - 1 for k in given[i] if 1 <= k <= len(cs)))
+    return order
+
+
+async def _download_first(query: ImageQuery, cands: list[images.Candidate], runtime: Runtime, base: str,
+                          client) -> ImageSelection:
     tried = []
-    for cand in images.candidates(result)[:CANDIDATES_PER_SCENE]:
+    for cand in cands:
         try:
-            img, why = await asyncio.wait_for(images.download(dl_client, cand.image_url), DOWNLOAD_DEADLINE_S)
+            img, why = await asyncio.wait_for(images.download(client, cand.image_url), DOWNLOAD_DEADLINE_S)
         except asyncio.TimeoutError:
             img, why = None, "download timed out"
         if img is None:
             tried.append(why)
             continue
-        asset = await runtime.write_bytes(f"{base}/{sid}.{img.ext}", img.data, img.media_type)
+        asset = await runtime.write_bytes(f"{base}/s{query.scene_index:02d}.{img.ext}", img.data, img.media_type)
         return ImageSelection(query=query, status="selected", asset=asset, image_url=cand.image_url,
                               source_page_url=cand.source_page_url, description=cand.description)
-    reason = "no image results" if not tried else "no usable image: " + "; ".join(tried)
+    reason = "no relevant image among search results" if not tried else "no usable image: " + "; ".join(tried)
     return ImageSelection(query=query, status="unavailable", reason=reason[:500])
 
 
@@ -421,14 +500,29 @@ async def find_images(request: ImageRequest, runtime: Runtime) -> ImageBundle:
         queries = await _plan_queries(request, runtime)
         await runtime.write_json(f"{base}/plan.json", {"queries": [q.model_dump(mode="json") for q in queries]})
         sem = asyncio.Semaphore(SEARCH_CONCURRENCY)
+
+        async def guarded(coro):
+            async with sem:
+                try:
+                    return await coro
+                except Exception as exc:  # one scene's failure must not sink the other five
+                    return f"{type(exc).__name__}: {exc}"[:500]
+
         async with tavily.make_client(key) as search_client, images.make_client() as dl_client:
-            async def one(q: ImageQuery) -> ImageSelection:
-                async with sem:
-                    try:
-                        return await _select_live(q, runtime, base, search_client, dl_client)
-                    except Exception as exc:  # one scene's failure must not sink the other five
-                        return ImageSelection(query=q, status="unavailable", reason=f"{type(exc).__name__}: {exc}"[:500])
-            selections = list(await asyncio.gather(*(one(q) for q in queries)))
+            found = await asyncio.gather(*(guarded(_search(q, runtime, base, search_client)) for q in queries))
+            cands = {q.scene_index: c for q, c in zip(queries, found) if isinstance(c, list)}
+            order = await _rank(runtime, request, cands) if cands else {}
+            await runtime.write_json(f"{base}/ranking.json", {str(i): o for i, o in order.items()})
+            picked = await asyncio.gather(*(
+                guarded(_download_first(q, [cands[q.scene_index][k] for k in order[q.scene_index]],
+                                           runtime, base, dl_client))
+                for q in queries if q.scene_index in cands))
+        by_scene = {s.query.scene_index: s for s in picked if isinstance(s, ImageSelection)}
+        reasons = dict(zip((q.scene_index for q in queries if q.scene_index in cands), picked))
+        reasons.update({q.scene_index: c for q, c in zip(queries, found) if isinstance(c, str)})
+        selections = [by_scene.get(q.scene_index) or ImageSelection(query=q, status="unavailable",
+                                                                    reason=str(reasons[q.scene_index]))
+                      for q in queries]
 
     bundle = ImageBundle(project_id=request.project_id, script_revision=rev, selections=selections)
     problems = checks.image_problems(bundle, request.script)
