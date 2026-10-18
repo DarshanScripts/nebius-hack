@@ -1,0 +1,61 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "theme_id": {
+      "const": "notebook_v1",
+      "default": "notebook_v1",
+      "title": "Theme Id",
+      "type": "string"
+    },
+    "background": {
+      "const": "#FFFFFF",
+      "default": "#FFFFFF",
+      "title": "Background",
+      "type": "string"
+    },
+    "dot_color": {
+      "const": "#D8DEE8",
+      "default": "#D8DEE8",
+      "title": "Dot Color",
+      "type": "string"
+    },
+    "dot_spacing": {
+      "const": 24,
+      "default": 24,
+      "title": "Dot Spacing",
+      "type": "integer"
+    },
+    "dot_radius": {
+      "const": 1,
+      "default": 1,
+      "title": "Dot Radius",
+      "type": "integer"
+    },
+    "workboard_height": {
+      "const": 1344,
+      "default": 1344,
+      "title": "Workboard Height",
+      "type": "integer"
+    },
+    "character_region_y": {
+      "const": 1344,
+      "default": 1344,
+      "title": "Character Region Y",
+      "type": "integer"
+    },
+    "font_family": {
+      "const": "DejaVu Sans",
+      "default": "DejaVu Sans",
+      "title": "Font Family",
+      "type": "string"
+    },
+    "boundary_frames": {
+      "const": 12,
+      "default": 12,
+      "title": "Boundary Frames",
+      "type": "integer"
+    }
+  },
+  "title": "ThemeSpec",
+  "type": "object"
+}

@@ -1,0 +1,40 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "message": {
+      "maxLength": 4000,
+      "minLength": 1,
+      "title": "Message",
+      "type": "string"
+    },
+    "scene_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Scene Id"
+    },
+    "expected_scene_revision": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expected Scene Revision"
+    }
+  },
+  "required": [
+    "message"
+  ],
+  "title": "EditRequest",
+  "type": "object"
+}

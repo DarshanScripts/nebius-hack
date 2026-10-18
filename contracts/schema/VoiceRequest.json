@@ -1,0 +1,250 @@
+{
+  "$defs": {
+    "ArtifactRef": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "media_type": {
+          "title": "Media Type",
+          "type": "string"
+        },
+        "sha256": {
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "title": "Size Bytes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "key",
+        "media_type",
+        "sha256",
+        "size_bytes"
+      ],
+      "title": "ArtifactRef",
+      "type": "object"
+    },
+    "CharacterSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "character_id": {
+          "enum": [
+            "sundar",
+            "jensen"
+          ],
+          "title": "Character Id",
+          "type": "string"
+        },
+        "display_name": {
+          "title": "Display Name",
+          "type": "string"
+        },
+        "image": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ArtifactRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "voice_reference": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ArtifactRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "reference_transcript": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reference Transcript"
+        },
+        "voice_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Voice Id"
+        }
+      },
+      "required": [
+        "character_id",
+        "display_name"
+      ],
+      "title": "CharacterSpec",
+      "type": "object"
+    },
+    "DialogueScript": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "project_id": {
+          "title": "Project Id",
+          "type": "string"
+        },
+        "script_revision": {
+          "minimum": 1,
+          "title": "Script Revision",
+          "type": "integer"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "language": {
+          "const": "en",
+          "default": "en",
+          "title": "Language",
+          "type": "string"
+        },
+        "turns": {
+          "items": {
+            "$ref": "#/$defs/DialogueTurn"
+          },
+          "maxItems": 12,
+          "minItems": 12,
+          "title": "Turns",
+          "type": "array"
+        }
+      },
+      "required": [
+        "project_id",
+        "script_revision",
+        "title",
+        "turns"
+      ],
+      "title": "DialogueScript",
+      "type": "object"
+    },
+    "DialogueTurn": {
+      "additionalProperties": false,
+      "properties": {
+        "dialogue_id": {
+          "title": "Dialogue Id",
+          "type": "string"
+        },
+        "order": {
+          "maximum": 12,
+          "minimum": 1,
+          "title": "Order",
+          "type": "integer"
+        },
+        "scene_index": {
+          "maximum": 6,
+          "minimum": 1,
+          "title": "Scene Index",
+          "type": "integer"
+        },
+        "speaker_id": {
+          "enum": [
+            "sundar",
+            "jensen"
+          ],
+          "title": "Speaker Id",
+          "type": "string"
+        },
+        "text": {
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "intent": {
+          "enum": [
+            "hook",
+            "question",
+            "answer",
+            "challenge",
+            "takeaway"
+          ],
+          "title": "Intent",
+          "type": "string"
+        },
+        "claim_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Claim Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "dialogue_id",
+        "order",
+        "scene_index",
+        "speaker_id",
+        "text",
+        "intent"
+      ],
+      "title": "DialogueTurn",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "script": {
+      "$ref": "#/$defs/DialogueScript"
+    },
+    "characters": {
+      "items": {
+        "$ref": "#/$defs/CharacterSpec"
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "title": "Characters",
+      "type": "array"
+    },
+    "max_speech_frames": {
+      "const": 1599,
+      "default": 1599,
+      "title": "Max Speech Frames",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "project_id",
+    "script",
+    "characters"
+  ],
+  "title": "VoiceRequest",
+  "type": "object"
+}

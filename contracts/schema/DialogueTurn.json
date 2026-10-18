@@ -1,0 +1,62 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "dialogue_id": {
+      "title": "Dialogue Id",
+      "type": "string"
+    },
+    "order": {
+      "maximum": 12,
+      "minimum": 1,
+      "title": "Order",
+      "type": "integer"
+    },
+    "scene_index": {
+      "maximum": 6,
+      "minimum": 1,
+      "title": "Scene Index",
+      "type": "integer"
+    },
+    "speaker_id": {
+      "enum": [
+        "sundar",
+        "jensen"
+      ],
+      "title": "Speaker Id",
+      "type": "string"
+    },
+    "text": {
+      "minLength": 1,
+      "title": "Text",
+      "type": "string"
+    },
+    "intent": {
+      "enum": [
+        "hook",
+        "question",
+        "answer",
+        "challenge",
+        "takeaway"
+      ],
+      "title": "Intent",
+      "type": "string"
+    },
+    "claim_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Claim Ids",
+      "type": "array"
+    }
+  },
+  "required": [
+    "dialogue_id",
+    "order",
+    "scene_index",
+    "speaker_id",
+    "text",
+    "intent"
+  ],
+  "title": "DialogueTurn",
+  "type": "object"
+}

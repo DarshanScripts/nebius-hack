@@ -1,0 +1,81 @@
+{
+  "$defs": {
+    "Claim": {
+      "additionalProperties": false,
+      "properties": {
+        "claim_id": {
+          "title": "Claim Id",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "source_ids": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Source Ids",
+          "type": "array"
+        },
+        "evidence_type": {
+          "enum": [
+            "documented",
+            "general_industry_practice",
+            "inference"
+          ],
+          "title": "Evidence Type",
+          "type": "string"
+        },
+        "caveat": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Caveat"
+        }
+      },
+      "required": [
+        "claim_id",
+        "text",
+        "source_ids",
+        "evidence_type"
+      ],
+      "title": "Claim",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "summary": {
+      "title": "Summary",
+      "type": "string"
+    },
+    "claims": {
+      "items": {
+        "$ref": "#/$defs/Claim"
+      },
+      "title": "Claims",
+      "type": "array"
+    },
+    "uncertainties": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Uncertainties",
+      "type": "array"
+    }
+  },
+  "required": [
+    "summary",
+    "claims"
+  ],
+  "title": "ResearchNotes",
+  "type": "object"
+}

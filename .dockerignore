@@ -15,3 +15,5 @@ output
 assets/voices
 assets/characters
 **/*.log
+.pytest_cache
+.ruff_cache

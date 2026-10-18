@@ -1,0 +1,36 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "source_id": {
+      "title": "Source Id",
+      "type": "string"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "url": {
+      "title": "Url",
+      "type": "string"
+    },
+    "favicon": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Favicon"
+    }
+  },
+  "required": [
+    "source_id",
+    "title",
+    "url"
+  ],
+  "title": "Source",
+  "type": "object"
+}

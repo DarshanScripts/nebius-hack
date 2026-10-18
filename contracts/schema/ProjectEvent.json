@@ -1,0 +1,76 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "event_id": {
+      "title": "Event Id",
+      "type": "integer"
+    },
+    "at": {
+      "title": "At",
+      "type": "string"
+    },
+    "type": {
+      "title": "Type",
+      "type": "string"
+    },
+    "scene_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Scene Id"
+    },
+    "revision": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Revision"
+    },
+    "message": {
+      "title": "Message",
+      "type": "string"
+    },
+    "progress": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Progress"
+    }
+  },
+  "required": [
+    "project_id",
+    "event_id",
+    "at",
+    "type",
+    "message"
+  ],
+  "title": "ProjectEvent",
+  "type": "object"
+}
